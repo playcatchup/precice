@@ -161,7 +161,7 @@ public:
 private:
   /// Private, empty constructor for singleton pattern
   EventRegistry()
-      : globalEvent("_GLOBAL", true, false) // Unstarted, it's started in initialize
+      : globalEvent("_GLOBAL", false) // Unstarted, it's started in initialize
   {
   }
 

@@ -38,21 +38,20 @@ public:
   /// Allows to put a non-measured (i.e. with a given duration) Event to the measurements.
   Event(const std::string &eventName, Clock::duration initialDuration);
 
-  /// Creates a new event and starts it, unless autostart = false, synchronize processes, when barrier == true
-  /** Use barrier == true with caution, as it can lead to deadlocks. */
-  Event(const std::string &eventName, bool barrier = false, bool autostart = true);
+  /// Creates a new event and starts it, unless autostart = false
+  Event(const std::string &eventName, bool autostart = true);
 
   /// Stops the event if it's running and report its times to the EventRegistry
   ~Event();
 
   /// Starts an event. If it's already started it has no effect.
-  void start(bool barrier = false);
+  void start();
 
   /// Stops an event and commit it. If it's already stopped it has no effect.
-  void stop(bool barrier = false);
+  void stop();
 
   /// Pauses an event, does not commit. If it's already paused it has no effect.
-  void pause(bool barrier = false);
+  void pause();
 
   /// Gets the duration of the event.
   Clock::duration getDuration() const;
@@ -70,7 +69,6 @@ private:
   Clock::time_point starttime;
   Clock::duration   duration = Clock::duration::zero();
   State             state    = State::STOPPED;
-  bool              _barrier = false;
 };
 
 /// Class that changes the prefix in its scope

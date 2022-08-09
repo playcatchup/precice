@@ -204,7 +204,7 @@ void EventRegistry::initialize(std::string applicationName, std::string runName,
 
   localRankData.initialize();
 
-  globalEvent.start(false);
+  globalEvent.start();
   initialized = true;
   finalized   = false;
 }
@@ -258,7 +258,7 @@ Event &EventRegistry::getStoredEvent(std::string const &name)
   prefix              = "";
   auto insertion      = storedEvents.emplace(std::piecewise_construct,
                                         std::forward_as_tuple(name),
-                                        std::forward_as_tuple(name, false, false));
+                                        std::forward_as_tuple(name, false));
 
   prefix = previousPrefix;
   return std::get<0>(insertion)->second;
