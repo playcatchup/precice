@@ -80,6 +80,9 @@ public:
 
   static void broadcast(precice::span<double> values);
 
+  /// Synchronizes all ranks also known as a barrier
+  static void synchronize();
+
 private:
   static logging::Logger _log;
 

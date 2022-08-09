@@ -337,5 +337,18 @@ void IntraComm::broadcast(double &value)
   }
 }
 
+void IntraComm::synchronize()
+{
+  PRECICE_TRACE();
+
+  if (!isParallel())
+    return;
+
+  int local = 1;
+  int sum   = -1;
+  allreduceSum(local, sum);
+  PRECICE_ASSERT(sum == _size);
+}
+
 } // namespace utils
 } // namespace precice
