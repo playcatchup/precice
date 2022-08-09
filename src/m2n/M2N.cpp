@@ -44,7 +44,8 @@ void M2N::acceptPrimaryRankConnection(
 {
   PRECICE_TRACE(acceptorName, requesterName);
 
-  Event e("m2n.acceptPrimaryRankConnection", precice::syncMode);
+  utils::IntraComm::synchronize();
+  Event e("m2n.acceptPrimaryRankConnection");
 
   if (not utils::IntraComm::isSecondary()) {
     PRECICE_DEBUG("Accept primary connection");
@@ -62,7 +63,8 @@ void M2N::requestPrimaryRankConnection(
 {
   PRECICE_TRACE(acceptorName, requesterName);
 
-  Event e("m2n.requestPrimaryRankConnection", precice::syncMode);
+  utils::IntraComm::synchronize();
+  Event e("m2n.requestPrimaryRankConnection");
 
   if (not utils::IntraComm::isSecondary()) {
     PRECICE_ASSERT(_intraComm);
@@ -80,7 +82,8 @@ void M2N::acceptSecondaryRanksConnection(
 {
   PRECICE_TRACE(acceptorName, requesterName);
   PRECICE_ASSERT(not _useOnlyPrimaryCom);
-  Event e("m2n.acceptSecondaryRanksConnection", precice::syncMode);
+  utils::IntraComm::synchronize();
+  Event e("m2n.acceptSecondaryRanksConnection");
 
   _areSecondaryRanksConnected = true;
   for (const auto &pair : _distComs) {
@@ -97,7 +100,8 @@ void M2N::requestSecondaryRanksConnection(
 {
   PRECICE_TRACE(acceptorName, requesterName);
   PRECICE_ASSERT(not _useOnlyPrimaryCom);
-  Event e("m2n.requestSecondaryRanksConnection", precice::syncMode);
+  utils::IntraComm::synchronize();
+  Event e("m2n.requestSecondaryRanksConnection");
 
   _areSecondaryRanksConnected = true;
   for (const auto &pair : _distComs) {
@@ -223,7 +227,8 @@ void M2N::send(
       _intraComm->send(ack, 0);
     }
 
-    Event e("m2n.sendData", precice::syncMode);
+    utils::IntraComm::synchronize();
+    Event e("m2n.sendData");
 
     _distComs[meshID]->send(itemsToSend, valueDimension);
   } else {
@@ -297,7 +302,8 @@ void M2N::receive(precice::span<double> itemsToReceive,
       }
     }
 
-    Event e("m2n.receiveData", precice::syncMode);
+    utils::IntraComm::synchronize();
+    Event e("m2n.receiveData");
 
     _distComs[meshID]->receive(itemsToReceive, valueDimension);
   } else {

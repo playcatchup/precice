@@ -15,6 +15,9 @@
 #include "utils/span_tools.hpp"
 
 namespace precice {
+
+extern bool syncMode;
+
 namespace utils {
 
 Rank                  IntraComm::_rank            = -1;
@@ -341,7 +344,7 @@ void IntraComm::synchronize()
 {
   PRECICE_TRACE();
 
-  if (!isParallel())
+  if (!isParallel() || precice::syncMode)
     return;
 
   int local = 1;

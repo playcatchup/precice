@@ -1,4 +1,5 @@
 #pragma once
+#include "utils/IntraComm.hpp"
 #ifndef PRECICE_NO_PETSC
 
 #include "mapping/RadialBasisFctBaseMapping.hpp"
@@ -22,10 +23,6 @@ struct SolutionCaching;
 }
 } // namespace PetRadialBasisFunctionMapping
 } // namespace MappingTests
-
-namespace precice {
-extern bool syncMode;
-} // namespace precice
 
 namespace precice {
 namespace mapping {
@@ -207,8 +204,9 @@ template <typename RADIAL_BASIS_FUNCTION_T>
 void PetRadialBasisFctMapping<RADIAL_BASIS_FUNCTION_T>::computeMapping()
 {
   PRECICE_TRACE();
-  precice::utils::Event e("map.pet.computeMapping.From" + this->input()->getName() + "To" + this->output()->getName(), precice::syncMode);
-  precice::utils::Event ePreCompute("map.pet.preComputeMapping.From" + this->input()->getName() + "To" + this->output()->getName(), precice::syncMode);
+  utils::IntraComm::synchronize();
+  precice::utils::Event e("map.pet.computeMapping.From" + this->input()->getName() + "To" + this->output()->getName());
+  precice::utils::Event ePreCompute("map.pet.preComputeMapping.From" + this->input()->getName() + "To" + this->output()->getName());
 
   clear();
 
@@ -257,7 +255,8 @@ void PetRadialBasisFctMapping<RADIAL_BASIS_FUNCTION_T>::computeMapping()
   PRECICE_DEBUG("outMesh->vertices().size() = {}", outMesh->vertices().size());
   ePreCompute.stop();
 
-  precice::utils::Event eCreateMatrices("map.pet.createMatrices.From" + this->input()->getName() + "To" + this->output()->getName(), precice::syncMode);
+  utils::IntraComm::synchronize();
+  precice::utils::Event eCreateMatrices("map.pet.createMatrices.From" + this->input()->getName() + "To" + this->output()->getName());
 
   // Matrix C: Symmetric, sparse matrix with n x n local size.
   _matrixC.init(n, n, PETSC_DETERMINE, PETSC_DETERMINE, MATSBAIJ);
@@ -280,7 +279,8 @@ void PetRadialBasisFctMapping<RADIAL_BASIS_FUNCTION_T>::computeMapping()
   PRECICE_DEBUG("Set matrix A to local size {} x {}", outputSize, n);
 
   eCreateMatrices.stop();
-  precice::utils::Event eAO("map.pet.AO.From" + this->input()->getName() + "To" + this->output()->getName(), precice::syncMode);
+  utils::IntraComm::synchronize();
+  precice::utils::Event eAO("map.pet.AO.From" + this->input()->getName() + "To" + this->output()->getName());
 
   auto const ownerRangeABegin = _matrixA.ownerRange().first;
   auto const ownerRangeAEnd   = _matrixA.ownerRange().second;
@@ -315,7 +315,8 @@ void PetRadialBasisFctMapping<RADIAL_BASIS_FUNCTION_T>::computeMapping()
 
   // -- BEGIN FILL LOOP FOR MATRIX C --
   PRECICE_DEBUG("Begin filling matrix C");
-  precice::utils::Event eFillC("map.pet.fillC.From" + this->input()->getName() + "To" + this->output()->getName(), precice::syncMode);
+  utils::IntraComm::synchronize();
+  precice::utils::Event eFillC("map.pet.fillC.From" + this->input()->getName() + "To" + this->output()->getName());
 
   // We collect entries for each row and set them blockwise using MatSetValues.
   PetscInt const           idxSize = std::max(_matrixC.getSize().second, _matrixQ.getSize().second);
@@ -423,7 +424,8 @@ void PetRadialBasisFctMapping<RADIAL_BASIS_FUNCTION_T>::computeMapping()
 
   // -- BEGIN FILL LOOP FOR MATRIX A --
   PRECICE_DEBUG("Begin filling matrix A.");
-  precice::utils::Event eFillA("map.pet.fillA.From" + this->input()->getName() + "To" + this->output()->getName(), precice::syncMode);
+  utils::IntraComm::synchronize();
+  precice::utils::Event eFillA("map.pet.fillA.From" + this->input()->getName() + "To" + this->output()->getName());
 
   for (PetscInt row = ownerRangeABegin; row < ownerRangeAEnd; ++row) {
     mesh::Vertex const &oVertex = outMesh->vertices()[row - _matrixA.ownerRange().first];
@@ -478,7 +480,8 @@ void PetRadialBasisFctMapping<RADIAL_BASIS_FUNCTION_T>::computeMapping()
   eFillA.stop();
   // -- END FILL LOOP FOR MATRIX A --
 
-  precice::utils::Event ePostFill("map.pet.postFill.From" + this->input()->getName() + "To" + this->output()->getName(), precice::syncMode);
+  utils::IntraComm::synchronize();
+  precice::utils::Event ePostFill("map.pet.postFill.From" + this->input()->getName() + "To" + this->output()->getName());
 
   ierr = MatAssemblyBegin(_matrixA, MAT_FINAL_ASSEMBLY);
   CHKERRV(ierr);
@@ -493,7 +496,8 @@ void PetRadialBasisFctMapping<RADIAL_BASIS_FUNCTION_T>::computeMapping()
 
   ePostFill.stop();
 
-  precice::utils::Event eSolverInit("map.pet.solverInit.From" + this->input()->getName() + "To" + this->output()->getName(), precice::syncMode);
+  utils::IntraComm::synchronize();
+  precice::utils::Event eSolverInit("map.pet.solverInit.From" + this->input()->getName() + "To" + this->output()->getName());
 
   // -- CONFIGURE SOLVER FOR POLYNOMIAL --
   if (_polynomial == Polynomial::SEPARATE) {
@@ -535,7 +539,8 @@ void PetRadialBasisFctMapping<RADIAL_BASIS_FUNCTION_T>::computeMapping()
 
   // -- COMPUTE RESCALING COEFFICIENTS USING THE SYSTEM MATRIX C SOLVER --
   if (useRescaling and (_polynomial == Polynomial::SEPARATE)) {
-    precice::utils::Event eRescaling("map.pet.computeRescaling.From" + this->input()->getName() + "To" + this->output()->getName(), precice::syncMode);
+    utils::IntraComm::synchronize();
+    precice::utils::Event eRescaling("map.pet.computeRescaling.From" + this->input()->getName() + "To" + this->output()->getName());
     auto                  rhs             = petsc::Vector::allocate(_matrixC);
     auto                  rescalingCoeffs = petsc::Vector::allocate(_matrixC);
     VecSet(rhs, 1);
@@ -588,7 +593,8 @@ template <typename RADIAL_BASIS_FUNCTION_T>
 void PetRadialBasisFctMapping<RADIAL_BASIS_FUNCTION_T>::mapConsistent(DataID inputDataID, DataID outputDataID)
 {
   PRECICE_TRACE(inputDataID, outputDataID);
-  precice::utils::Event e("map.pet.mapData.From" + this->input()->getName() + "To" + this->output()->getName(), precice::syncMode);
+  utils::IntraComm::synchronize();
+  precice::utils::Event e("map.pet.mapData.From" + this->input()->getName() + "To" + this->output()->getName());
 
   PetscErrorCode ierr      = 0;
   auto const &   inValues  = this->input()->data(inputDataID)->values();
@@ -658,7 +664,8 @@ void PetRadialBasisFctMapping<RADIAL_BASIS_FUNCTION_T>::mapConsistent(DataID inp
                                                     std::forward_as_tuple(petsc::Vector::allocate(_matrixC, "p"))))
                            ->second;
 
-    utils::Event eSolve("map.pet.solveConsistent.From" + this->input()->getName() + "To" + this->output()->getName(), precice::syncMode);
+    utils::IntraComm::synchronize();
+    utils::Event eSolve("map.pet.solveConsistent.From" + this->input()->getName() + "To" + this->output()->getName());
     const auto   solverResult = _solver.solve(in, p);
     eSolve.addData("Iterations", _solver.getIterationNumber());
     eSolve.stop();
@@ -718,7 +725,8 @@ template <typename RADIAL_BASIS_FUNCTION_T>
 void PetRadialBasisFctMapping<RADIAL_BASIS_FUNCTION_T>::mapConservative(DataID inputDataID, DataID outputDataID)
 {
   PRECICE_TRACE(inputDataID, outputDataID);
-  precice::utils::Event e("map.pet.mapData.From" + this->input()->getName() + "To" + this->output()->getName(), precice::syncMode);
+  utils::IntraComm::synchronize();
+  precice::utils::Event e("map.pet.mapData.From" + this->input()->getName() + "To" + this->output()->getName());
 
   PetscErrorCode ierr      = 0;
   auto const &   inValues  = this->input()->data(inputDataID)->values();
@@ -796,7 +804,8 @@ void PetRadialBasisFctMapping<RADIAL_BASIS_FUNCTION_T>::mapConservative(DataID i
     } else {
       ierr = MatMultTranspose(_matrixA, in, au);
       CHKERRV(ierr);
-      utils::Event eSolve("map.pet.solveConservative.From" + this->input()->getName() + "To" + this->output()->getName(), precice::syncMode);
+      utils::IntraComm::synchronize();
+      utils::Event eSolve("map.pet.solveConservative.From" + this->input()->getName() + "To" + this->output()->getName());
       const auto   solverResult = _solver.solve(au, out);
       eSolve.addData("Iterations", _solver.getIterationNumber());
       eSolve.stop();
@@ -950,7 +959,8 @@ void PetRadialBasisFctMapping<RADIAL_BASIS_FUNCTION_T>::estimatePreallocationMat
 template <typename RADIAL_BASIS_FUNCTION_T>
 void PetRadialBasisFctMapping<RADIAL_BASIS_FUNCTION_T>::computePreallocationMatrixC(const mesh::PtrMesh inMesh)
 {
-  precice::utils::Event ePreallocC("map.pet.preallocC.From" + this->input()->getName() + "To" + this->output()->getName(), precice::syncMode);
+  utils::IntraComm::synchronize();
+  precice::utils::Event ePreallocC("map.pet.preallocC.From" + this->input()->getName() + "To" + this->output()->getName());
 
   PetscInt n, ierr;
 
@@ -1028,7 +1038,8 @@ template <typename RADIAL_BASIS_FUNCTION_T>
 void PetRadialBasisFctMapping<RADIAL_BASIS_FUNCTION_T>::computePreallocationMatrixA(
     const mesh::PtrMesh inMesh, const mesh::PtrMesh outMesh)
 {
-  precice::utils::Event ePreallocA("map.pet.preallocA.From" + this->input()->getName() + "To" + this->output()->getName(), precice::syncMode);
+  utils::IntraComm::synchronize();
+  precice::utils::Event ePreallocA("map.pet.preallocA.From" + this->input()->getName() + "To" + this->output()->getName());
 
   PetscInt ownerRangeABegin, ownerRangeAEnd, colOwnerRangeABegin, colOwnerRangeAEnd;
   PetscInt outputSize, ierr;
@@ -1106,7 +1117,8 @@ template <typename RADIAL_BASIS_FUNCTION_T>
 typename PetRadialBasisFctMapping<RADIAL_BASIS_FUNCTION_T>::VertexData
 PetRadialBasisFctMapping<RADIAL_BASIS_FUNCTION_T>::savedPreallocationMatrixC(mesh::PtrMesh const inMesh)
 {
-  precice::utils::Event ePreallocC("map.pet.preallocC.From" + this->input()->getName() + "To" + this->output()->getName(), precice::syncMode);
+  utils::IntraComm::synchronize();
+  precice::utils::Event ePreallocC("map.pet.preallocC.From" + this->input()->getName() + "To" + this->output()->getName());
 
   PetscInt n;
 
@@ -1185,7 +1197,8 @@ typename PetRadialBasisFctMapping<RADIAL_BASIS_FUNCTION_T>::VertexData
 PetRadialBasisFctMapping<RADIAL_BASIS_FUNCTION_T>::savedPreallocationMatrixA(mesh::PtrMesh const inMesh, mesh::PtrMesh const outMesh)
 {
   PRECICE_INFO("Using saved preallocation");
-  precice::utils::Event ePreallocA("map.pet.preallocA.From" + this->input()->getName() + "To" + this->output()->getName(), precice::syncMode);
+  utils::IntraComm::synchronize();
+  precice::utils::Event ePreallocA("map.pet.preallocA.From" + this->input()->getName() + "To" + this->output()->getName());
 
   PetscInt ownerRangeABegin, ownerRangeAEnd, colOwnerRangeABegin, colOwnerRangeAEnd;
   PetscInt outputSize;
@@ -1266,7 +1279,8 @@ typename PetRadialBasisFctMapping<RADIAL_BASIS_FUNCTION_T>::VertexData
 PetRadialBasisFctMapping<RADIAL_BASIS_FUNCTION_T>::bgPreallocationMatrixC(mesh::PtrMesh const inMesh)
 {
   PRECICE_INFO("Using tree-based preallocation for matrix C");
-  precice::utils::Event ePreallocC("map.pet.preallocC.From" + this->input()->getName() + "To" + this->output()->getName(), precice::syncMode);
+  utils::IntraComm::synchronize();
+  precice::utils::Event ePreallocC("map.pet.preallocC.From" + this->input()->getName() + "To" + this->output()->getName());
 
   PetscInt n;
   std::tie(n, std::ignore) = _matrixC.getLocalSize();
@@ -1346,7 +1360,8 @@ typename PetRadialBasisFctMapping<RADIAL_BASIS_FUNCTION_T>::VertexData
 PetRadialBasisFctMapping<RADIAL_BASIS_FUNCTION_T>::bgPreallocationMatrixA(mesh::PtrMesh const inMesh, mesh::PtrMesh const outMesh)
 {
   PRECICE_INFO("Using tree-based preallocation for matrix A");
-  precice::utils::Event ePreallocA("map.pet.preallocA.From" + this->input()->getName() + "To" + this->output()->getName(), precice::syncMode);
+  utils::IntraComm::synchronize();
+  precice::utils::Event ePreallocA("map.pet.preallocA.From" + this->input()->getName() + "To" + this->output()->getName());
 
   PetscInt       ownerRangeABegin, ownerRangeAEnd, colOwnerRangeABegin, colOwnerRangeAEnd;
   PetscInt const outputSize    = _matrixA.getLocalSize().first;

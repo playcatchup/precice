@@ -7,11 +7,10 @@
 #include "utils/EigenHelperFunctions.hpp"
 #include "utils/Event.hpp"
 #include "utils/EventUtils.hpp"
+#include "utils/IntraComm.hpp"
 #include "utils/assertion.hpp"
 
 namespace precice {
-extern bool syncMode;
-
 namespace mapping {
 
 NearestNeighborMapping::NearestNeighborMapping(
@@ -31,7 +30,8 @@ NearestNeighborMapping::NearestNeighborMapping(
 void NearestNeighborMapping::mapConservative(DataID inputDataID, DataID outputDataID)
 {
   PRECICE_TRACE(inputDataID, outputDataID);
-  precice::utils::Event e("map." + mappingNameShort + ".mapData.From" + input()->getName() + "To" + output()->getName(), precice::syncMode);
+  utils::IntraComm::synchronize();
+  precice::utils::Event e("map." + mappingNameShort + ".mapData.From" + input()->getName() + "To" + output()->getName());
   PRECICE_DEBUG("Map conservative");
 
   const Eigen::VectorXd &inputValues  = input()->data(inputDataID)->values();
@@ -58,7 +58,8 @@ void NearestNeighborMapping::mapConservative(DataID inputDataID, DataID outputDa
 void NearestNeighborMapping::mapConsistent(DataID inputDataID, DataID outputDataID)
 {
   PRECICE_TRACE(inputDataID, outputDataID);
-  precice::utils::Event e("map." + mappingNameShort + ".mapData.From" + input()->getName() + "To" + output()->getName(), precice::syncMode);
+  utils::IntraComm::synchronize();
+  precice::utils::Event e("map." + mappingNameShort + ".mapData.From" + input()->getName() + "To" + output()->getName());
   PRECICE_DEBUG((hasConstraint(CONSISTENT) ? "Map consistent" : "Map scaled-consistent"));
 
   const Eigen::VectorXd &inputValues  = input()->data(inputDataID)->values();

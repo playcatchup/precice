@@ -16,12 +16,11 @@
 #include "mesh/Vertex.hpp"
 #include "query/Index.hpp"
 #include "utils/Event.hpp"
+#include "utils/IntraComm.hpp"
 #include "utils/Statistics.hpp"
 #include "utils/assertion.hpp"
 
 namespace precice {
-extern bool syncMode;
-
 namespace mapping {
 
 BarycentricBaseMapping::BarycentricBaseMapping(Constraint constraint, int dimensions)
@@ -39,7 +38,8 @@ void BarycentricBaseMapping::clear()
 void BarycentricBaseMapping::mapConservative(DataID inputDataID, DataID outputDataID)
 {
   PRECICE_TRACE(inputDataID, outputDataID);
-  precice::utils::Event e("map.bbm.mapData.From" + input()->getName() + "To" + output()->getName(), precice::syncMode);
+  utils::IntraComm::synchronize();
+  precice::utils::Event e("map.bbm.mapData.From" + input()->getName() + "To" + output()->getName());
   PRECICE_ASSERT(getConstraint() == CONSERVATIVE, getConstraint());
   PRECICE_DEBUG("Map conservative");
   PRECICE_ASSERT(_interpolations.size() == input()->vertices().size(),
@@ -67,7 +67,8 @@ void BarycentricBaseMapping::mapConservative(DataID inputDataID, DataID outputDa
 void BarycentricBaseMapping::mapConsistent(DataID inputDataID, DataID outputDataID)
 {
   PRECICE_TRACE(inputDataID, outputDataID);
-  precice::utils::Event e("map.bbm.mapData.From" + input()->getName() + "To" + output()->getName(), precice::syncMode);
+  utils::IntraComm::synchronize();
+  precice::utils::Event e("map.bbm.mapData.From" + input()->getName() + "To" + output()->getName());
   PRECICE_DEBUG("Map consistent");
   PRECICE_ASSERT(_interpolations.size() == output()->vertices().size(),
                  _interpolations.size(), output()->vertices().size());
@@ -95,7 +96,8 @@ void BarycentricBaseMapping::mapConsistent(DataID inputDataID, DataID outputData
 void BarycentricBaseMapping::tagMeshFirstRound()
 {
   PRECICE_TRACE();
-  precice::utils::Event e("map.bbm.tagMeshFirstRound.From" + input()->getName() + "To" + output()->getName(), precice::syncMode);
+  utils::IntraComm::synchronize();
+  precice::utils::Event e("map.bbm.tagMeshFirstRound.From" + input()->getName() + "To" + output()->getName());
   PRECICE_DEBUG("Compute Mapping for Tagging");
 
   computeMapping();

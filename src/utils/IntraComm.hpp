@@ -80,7 +80,9 @@ public:
 
   static void broadcast(precice::span<double> values);
 
-  /// Synchronizes all ranks also known as a barrier
+  /** Synchronizes all ranks if syncMode is enabled
+   * @see precice::syncMode
+   */
   static void synchronize();
 
 private:

@@ -258,7 +258,8 @@ void SolverInterfaceImpl::configure(
   }
 
   auto &solverInitEvent = EventRegistry::instance().getStoredEvent("solver.initialize");
-  solverInitEvent.start(precice::syncMode);
+  utils::IntraComm::synchronize();
+  solverInitEvent.start();
 }
 
 double SolverInterfaceImpl::initialize()
@@ -268,8 +269,9 @@ double SolverInterfaceImpl::initialize()
   PRECICE_CHECK(_state != State::Initialized, "initialize() may only be called once.");
   PRECICE_ASSERT(not _couplingScheme->isInitialized());
   auto &solverInitEvent = EventRegistry::instance().getStoredEvent("solver.initialize");
-  solverInitEvent.pause(precice::syncMode);
-  Event                    e("initialize", precice::syncMode);
+  utils::IntraComm::synchronize();
+  solverInitEvent.pause();
+  Event                    e("initialize");
   utils::ScopedEventPrefix sep("initialize/");
 
   // Setup communication
@@ -342,7 +344,8 @@ double SolverInterfaceImpl::initialize()
 
   PRECICE_INFO(_couplingScheme->printCouplingState());
 
-  solverInitEvent.start(precice::syncMode);
+  utils::IntraComm::synchronize();
+  solverInitEvent.start();
 
   _meshLock.lockAll();
 
@@ -363,9 +366,11 @@ void SolverInterfaceImpl::initializeData()
                 "Did you forget to call markActionFulfilled(precice::constants::actionWriteInitialData()) after writing initial data?");
 
   auto &solverInitEvent = EventRegistry::instance().getStoredEvent("solver.initialize");
-  solverInitEvent.pause(precice::syncMode);
+  utils::IntraComm::synchronize();
+  solverInitEvent.pause();
 
-  Event                    e("initializeData", precice::syncMode);
+  utils::IntraComm::synchronize();
+  Event                    e("initializeData");
   utils::ScopedEventPrefix sep("initializeData/");
 
   PRECICE_DEBUG("Initialize data");
@@ -385,7 +390,8 @@ void SolverInterfaceImpl::initializeData()
   resetWrittenData();
   PRECICE_DEBUG("Plot output");
   _accessor->exportFinal();
-  solverInitEvent.start(precice::syncMode);
+  utils::IntraComm::synchronize();
+  solverInitEvent.start();
 
   _hasInitializedData = true;
 }
@@ -398,11 +404,13 @@ double SolverInterfaceImpl::advance(
 
   // Events for the solver time, stopped when we enter, restarted when we leave advance
   auto &solverEvent = EventRegistry::instance().getStoredEvent("solver.advance");
-  solverEvent.stop(precice::syncMode);
+  utils::IntraComm::synchronize();
+  solverEvent.stop();
   auto &solverInitEvent = EventRegistry::instance().getStoredEvent("solver.initialize");
-  solverInitEvent.stop(precice::syncMode);
+  solverInitEvent.stop();
 
-  Event                    e("advance", precice::syncMode);
+  utils::IntraComm::synchronize();
+  Event                    e("advance");
   utils::ScopedEventPrefix sep("advance/");
 
   PRECICE_CHECK(_state != State::Constructed, "initialize() has to be called before advance().");
@@ -481,7 +489,8 @@ double SolverInterfaceImpl::advance(
   resetWrittenData();
 
   _meshLock.lockAll();
-  solverEvent.start(precice::syncMode);
+  utils::IntraComm::synchronize();
+  solverEvent.start();
   return _couplingScheme->getNextTimestepMaxLength();
 }
 
@@ -492,7 +501,8 @@ void SolverInterfaceImpl::finalize()
 
   // Events for the solver time, finally stopped here
   auto &solverEvent = EventRegistry::instance().getStoredEvent("solver.advance");
-  solverEvent.stop(precice::syncMode);
+  utils::IntraComm::synchronize();
+  solverEvent.stop();
 
   Event                    e("finalize"); // no precice::syncMode here as MPI is already finalized at destruction of this event
   utils::ScopedEventPrefix sep("finalize/");
@@ -2078,7 +2088,7 @@ void SolverInterfaceImpl::initializeIntraCommunication()
 {
   PRECICE_TRACE();
 
-  Event e("com.initializeIntraCom", precice::syncMode);
+  Event e("com.initializeIntraCom");
   utils::IntraComm::getCommunication()->connectIntraComm(
       _accessorName, "IntraComm",
       _accessorProcessRank, _accessorCommunicatorSize);

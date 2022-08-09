@@ -8,13 +8,12 @@
 #include "mesh/SharedPointer.hpp"
 #include "mesh/Vertex.hpp"
 #include "utils/Event.hpp"
+#include "utils/IntraComm.hpp"
 #include "utils/Parallel.hpp"
 #include "utils/Statistics.hpp"
 #include "utils/assertion.hpp"
 
 namespace precice {
-extern bool syncMode;
-
 namespace mapping {
 
 NearestNeighborBaseMapping::NearestNeighborBaseMapping(
@@ -36,8 +35,9 @@ void NearestNeighborBaseMapping::computeMapping()
   PRECICE_ASSERT(input().get() != nullptr);
   PRECICE_ASSERT(output().get() != nullptr);
 
-  const std::string     baseEvent = "map." + mappingNameShort + ".computeMapping.From" + input()->getName() + "To" + output()->getName();
-  precice::utils::Event e(baseEvent, precice::syncMode);
+  const std::string baseEvent = "map." + mappingNameShort + ".computeMapping.From" + input()->getName() + "To" + output()->getName();
+  utils::IntraComm::synchronize();
+  precice::utils::Event e(baseEvent);
 
   // Setup Direction of Mapping
   mesh::PtrMesh origins, searchSpace;
@@ -109,7 +109,8 @@ void NearestNeighborBaseMapping::onMappingComputed(mesh::PtrMesh origins, mesh::
 void NearestNeighborBaseMapping::tagMeshFirstRound()
 {
   PRECICE_TRACE();
-  precice::utils::Event e("map." + mappingNameShort + ".tagMeshFirstRound.From" + input()->getName() + "To" + output()->getName(), precice::syncMode);
+  utils::IntraComm::synchronize();
+  precice::utils::Event e("map." + mappingNameShort + ".tagMeshFirstRound.From" + input()->getName() + "To" + output()->getName());
 
   computeMapping();
 

@@ -8,11 +8,10 @@
 #include "logging/LogMacros.hpp"
 #include "utils/EigenHelperFunctions.hpp"
 #include "utils/Event.hpp"
+#include "utils/IntraComm.hpp"
 #include "utils/assertion.hpp"
 
 namespace precice {
-extern bool syncMode;
-
 namespace mapping {
 
 NearestNeighborGradientMapping::NearestNeighborGradientMapping(
@@ -57,7 +56,8 @@ void NearestNeighborGradientMapping::onMappingComputed(mesh::PtrMesh origins, me
 void NearestNeighborGradientMapping::mapConsistent(DataID inputDataID, DataID outputDataID)
 {
   PRECICE_TRACE(inputDataID, outputDataID);
-  precice::utils::Event e("map." + mappingNameShort + ".mapData.From" + input()->getName() + "To" + output()->getName(), precice::syncMode);
+  utils::IntraComm::synchronize();
+  precice::utils::Event e("map." + mappingNameShort + ".mapData.From" + input()->getName() + "To" + output()->getName());
 
   PRECICE_ASSERT(input()->data(inputDataID)->hasGradient(), "Mesh \"{}\" does not contain gradient data. Using Nearest Neighbor Gradient requires gradient data.",
                  input()->getName());

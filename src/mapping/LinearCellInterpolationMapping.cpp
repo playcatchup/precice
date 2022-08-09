@@ -2,12 +2,11 @@
 #include "logging/LogMacros.hpp"
 #include "query/Index.hpp"
 #include "utils/Event.hpp"
+#include "utils/IntraComm.hpp"
 #include "utils/Statistics.hpp"
 #include "utils/assertion.hpp"
 
 namespace precice {
-extern bool syncMode;
-
 namespace mapping {
 
 LinearCellInterpolationMapping::LinearCellInterpolationMapping(
@@ -33,8 +32,9 @@ LinearCellInterpolationMapping::LinearCellInterpolationMapping(
 void LinearCellInterpolationMapping::computeMapping()
 {
   PRECICE_TRACE(input()->vertices().size(), output()->vertices().size());
-  const std::string     baseEvent = "map.vci.computeMapping.From" + input()->getName() + "To" + output()->getName();
-  precice::utils::Event e(baseEvent, precice::syncMode);
+  const std::string baseEvent = "map.vci.computeMapping.From" + input()->getName() + "To" + output()->getName();
+  utils::IntraComm::synchronize();
+  precice::utils::Event e(baseEvent);
 
   // Setup Direction of Mapping
   mesh::PtrMesh origins, searchSpace;

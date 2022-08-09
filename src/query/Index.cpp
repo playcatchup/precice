@@ -11,7 +11,6 @@
 #include "utils/Event.hpp"
 
 namespace precice {
-extern bool syncMode;
 namespace query {
 
 precice::logging::Logger Index::_log{"query::Index"};
