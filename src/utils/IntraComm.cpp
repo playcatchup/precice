@@ -344,7 +344,16 @@ void IntraComm::synchronize()
 {
   PRECICE_TRACE();
 
-  if (!isParallel() || precice::syncMode)
+  if (precice::syncMode) {
+    barrier();
+  }
+}
+
+void IntraComm::barrier()
+{
+  PRECICE_TRACE();
+
+  if (!isParallel())
     return;
 
   int local = 1;

@@ -9,98 +9,20 @@
 #include <vector>
 #include "Event.hpp"
 
-#ifndef PRECICE_NO_MPI
-#include <mpi.h>
-#else
-#include "utils/MPI_Mock.hpp"
-#endif
-
 namespace precice {
 namespace utils {
 
-/// Class that aggregates durations for a specific event.
-class EventData {
-public:
-  explicit EventData(std::string _name);
+struct PendingEvent {
+  PendingEvent(char t, const std::string &n, Event::Clock::time_point c)
+      : type(t), ename(n), clock(c) {}
+  PendingEvent(char t, const std::string &en, Event::Clock::time_point c, const std::string &dn, int dv)
+      : type(t), ename(en), clock(c), dname(dn), dvalue(dv) {}
 
-  EventData(std::string _name, long _count, long _total, long _max, long _min,
-            Event::Data data, Event::StateChanges stateChanges);
-
-  /// Adds an Events data.
-  void put(Event const &event);
-
-  std::string getName() const;
-
-  /// Get the average duration of all events so far.
-  long getAvg() const;
-
-  /// Get the maximum duration of all events so far
-  long getMax() const;
-
-  /// Get the minimum duration of all events so far
-  long getMin() const;
-
-  /// Get the total duration of all events so far
-  long getTotal() const;
-
-  /// Get the number of all events so far
-  long getCount() const;
-
-  Event::Data const &getData() const;
-
-  Event::Clock::duration max   = Event::Clock::duration::min();
-  Event::Clock::duration min   = Event::Clock::duration::max();
-  Event::Clock::duration total = Event::Clock::duration::zero();
-
-  Event::StateChanges stateChanges;
-
-private:
-  std::string                             name;
-  long                                    count = 0;
-  std::map<std::string, std::vector<int>> data;
-};
-
-/// Holds all EventData of one particular rank
-class RankData {
-public:
-  /// Records the initialized timestamp
-  void initialize();
-
-  /// Records the finalized timestamp
-  void finalize();
-
-  /// Adds a new event
-  void put(Event const &event);
-
-  /// Adds aggregated data for a specific event
-  void addEventData(EventData ed);
-
-  /// Normalizes all Events to zero time of t0
-  void normalizeTo(std::chrono::system_clock::time_point t0);
-
-  /// Clears all Event data
-  void clear();
-
-  /// Map of EventName -> EventData, should be private later
-  std::map<std::string, EventData> evData;
-
-  std::chrono::system_clock::duration getDuration() const;
-
-  std::chrono::system_clock::time_point initializedAt;
-  std::chrono::system_clock::time_point finalizedAt;
-
-private:
-  std::chrono::steady_clock::time_point initializedAtTicks;
-  std::chrono::steady_clock::time_point finalizedAtTicks;
-
-  bool isFinalized = true;
-};
-
-/// Holds data aggregated from all MPI ranks for one event
-struct GlobalEventStats {
-  int                    maxRank, minRank;
-  Event::Clock::duration max = Event::Clock::duration::min();
-  Event::Clock::duration min = Event::Clock::duration::max();
+  char                     type;
+  std::string              ename;
+  Event::Clock::time_point clock;
+  std::string              dname;
+  int                      dvalue;
 };
 
 /// High level object that stores data of all events.
@@ -112,6 +34,8 @@ public:
   /// Deleted copy operator for singleton pattern
   EventRegistry(EventRegistry const &) = delete;
 
+  ~EventRegistry();
+
   /// Deleted assignment operator for singleton pattern
   void operator=(EventRegistry const &) = delete;
 
@@ -122,9 +46,10 @@ public:
   /**
    * @param[in] applicationName A name that is added to the logfile to distinguish different participants
    * @param[in] runName A name of the run, will be printed as a separate column with each Event.
-   * @param[in] comm MPI communicator which is used for barriers and collecting information from ranks.
+   * @param[in] rank the current number of the parallel instance
+   * @param[in] size the total number of a parallel instances
    */
-  void initialize(std::string applicationName = "", std::string runName = "", MPI_Comm comm = MPI_COMM_WORLD);
+  void initialize(std::string applicationName = "", std::string runName = "", int rank = 0, int size = 1);
 
   /// Sets the global end time
   void finalize();
@@ -132,73 +57,47 @@ public:
   /// Clears the registry. needed for tests
   void clear();
 
-  /// Finalizes the timings and calls print. Can be used as a crash handler to still get some timing results.
-  void signal_handler(int signal);
+  /// Records an event
+  void put(PendingEvent pe);
 
-  /// Records the event.
-  void put(Event const &event);
+  template <typename... Args>
+  void put(Args &&... args)
+  {
+    put(PendingEvent{std::forward<Args>(args)...});
+  }
 
-  /// Returns or creates a stored event, i.e., an event with life beyond the current scope
-  Event &getStoredEvent(std::string const &name);
-
-  /// Prints a pretty report to stdout and a JSON report to appName-events.json
-  void printAll() const;
-
-  /// Prints the result table to an arbitrary stream, only prints at rank 0.
-  void writeSummary(std::ostream &out) const;
-
-  /// Writes the aggregated timings and state changes at JSON, only at rank 0.
-  void writeJSON(std::ostream &out) const;
-
-  MPI_Comm const &getMPIComm() const;
+  void flush();
 
   /// Currently active prefix. Changing that applies only to newly created events.
   std::string prefix;
 
-  /// A name that is added to the logfile to identify a run
-  std::string runName;
-
 private:
-  /// Private, empty constructor for singleton pattern
-  EventRegistry()
-      : globalEvent("_GLOBAL", false) // Unstarted, it's started in initialize
-  {
-  }
-
-  RankData localRankData;
-
-  /// Holds RankData from all ranks, only populated at rank 0
-  std::vector<RankData> globalRankData;
-
-  /// Gather EventData from all ranks on rank 0.
-  void collect();
-
-  /// Normalize times among all ranks
-  void normalize();
-
-  /// Collects first initialize and last finalize time at rank 0.
-  std::pair<std::chrono::system_clock::time_point, std::chrono::system_clock::time_point> collectInitAndFinalize();
-
-  /// Returns length of longest name
-  size_t getMaxNameWidth() const;
-
-  /// Finds the first initialized time and last finalized time in globalRankData
-  std::pair<std::chrono::system_clock::time_point, std::chrono::system_clock::time_point> findFirstAndLastTime() const;
-
-  /// Event for measuring global time
-  Event globalEvent;
-
-  bool initialized = false;
-
-  bool finalized = false;
-
-  std::map<std::string, Event> storedEvents;
-
   /// A name that is added to the logfile to distinguish different participants
-  std::string applicationName;
+  std::string _applicationName;
 
-  /// MPI Communicator
-  MPI_Comm comm;
+  /// A name that is added to the logfile to identify a run
+  std::string _runName;
+
+  int _rank;
+
+  int _size;
+
+  /// Private, empty constructor for singleton pattern
+  EventRegistry() = default;
+
+  std::vector<PendingEvent> _writeQueue;
+
+  std::ofstream _output;
+
+  bool _initialized = false;
+
+  bool _finalized = false;
+
+  Event::Clock::time_point              _initClock;
+  std::chrono::system_clock::time_point _initTime;
+
+  void startBackend();
+  void stopBackend();
 };
 
 } // namespace utils

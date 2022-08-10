@@ -18,16 +18,12 @@ class Event {
 public:
   enum class State : int {
     STOPPED = 0,
-    STARTED = 1,
+    RUNNING = 1,
     PAUSED  = 2,
   };
 
   /// Default clock type. All other chrono types are derived from it.
   using Clock = std::chrono::steady_clock;
-
-  using StateChanges = std::vector<std::pair<State, Clock::time_point>>;
-
-  using Data = std::map<std::string, std::vector<int>>;
 
   /// An Event can't be copied.
   Event(const Event &other) = delete;
@@ -35,40 +31,30 @@ public:
   /// Name used to identify the timer. Events of the same name are accumulated to
   std::string name;
 
-  /// Allows to put a non-measured (i.e. with a given duration) Event to the measurements.
-  Event(const std::string &eventName, Clock::duration initialDuration);
-
   /// Creates a new event and starts it, unless autostart = false
   Event(const std::string &eventName, bool autostart = true);
 
   /// Stops the event if it's running and report its times to the EventRegistry
   ~Event();
 
-  /// Starts an event. If it's already started it has no effect.
+  /// Starts or restarts a stoped event.
   void start();
 
-  /// Stops an event and commit it. If it's already stopped it has no effect.
-  void stop();
-
-  /// Pauses an event, does not commit. If it's already paused it has no effect.
+  /// Pauses a running event.
   void pause();
 
-  /// Gets the duration of the event.
-  Clock::duration getDuration() const;
+  /// Resumes a paused event.
+  void resume();
+
+  /// Stops a running event.
+  void stop();
 
   /// Adds named integer data, associated to an event.
   void addData(const std::string &key, int value);
 
-  Data data;
-
-  StateChanges stateChanges;
-
 private:
-  logging::Logger _log{"utils::Events"};
-
-  Clock::time_point starttime;
-  Clock::duration   duration = Clock::duration::zero();
-  State             state    = State::STOPPED;
+  std::string _name;
+  State       _state = State::STOPPED;
 };
 
 /// Class that changes the prefix in its scope
@@ -77,6 +63,8 @@ public:
   ScopedEventPrefix(const std::string &name);
 
   ~ScopedEventPrefix();
+
+  void pop();
 
 private:
   std::string previousName = "";

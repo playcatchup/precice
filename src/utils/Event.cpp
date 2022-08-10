@@ -1,23 +1,14 @@
-#include "Event.hpp"
-#include "EventUtils.hpp"
-#include "logging/LogMacros.hpp"
+#include "utils/Event.hpp"
+#include "utils/EventUtils.hpp"
+#include "utils/assertion.hpp"
 
 namespace precice {
 namespace utils {
 
-Event::Event(const std::string &eventName, Clock::duration initialDuration)
-    : name(EventRegistry::instance().prefix + eventName),
-      duration(initialDuration)
-{
-  EventRegistry::instance().put(*this);
-}
-
 Event::Event(const std::string &eventName, bool autostart)
-    : name(eventName)
+    : _name(eventName)
 {
-  // Set prefix here: workaround to omit data lock between instance() and Event ctor
-  if (eventName != "_GLOBAL")
-    name = EventRegistry::instance().prefix + eventName;
+  _name = EventRegistry::instance().prefix + _name;
   if (autostart) {
     start();
   }
@@ -25,53 +16,56 @@ Event::Event(const std::string &eventName, bool autostart)
 
 Event::~Event()
 {
-  stop();
+  if (_state == State::PAUSED) {
+    resume();
+  }
+  if (_state == State::RUNNING) {
+    stop();
+  }
 }
 
 void Event::start()
 {
-  state = State::STARTED;
-  stateChanges.push_back(std::make_pair(State::STARTED, Clock::now()));
-  starttime = Clock::now();
-  PRECICE_DEBUG("Started event {}", name);
-}
+  auto timestamp = Clock::now();
+  PRECICE_ASSERT(_state == State::STOPPED, _name);
+  _state = State::RUNNING;
 
-void Event::stop()
-{
-  if (state == State::STARTED or state == State::PAUSED) {
-    if (state == State::STARTED) {
-      auto stoptime = Clock::now();
-      duration += Clock::duration(stoptime - starttime);
-    }
-    stateChanges.push_back(std::make_pair(State::STOPPED, Clock::now()));
-    state = State::STOPPED;
-    EventRegistry::instance().put(*this);
-    data.clear();
-    stateChanges.clear();
-    duration = Clock::duration::zero();
-    PRECICE_DEBUG("Stopped event {}", name);
-  }
+  EventRegistry::instance().put('b', _name, timestamp);
 }
 
 void Event::pause()
 {
-  if (state == State::STARTED) {
-    auto stoptime = Clock::now();
-    stateChanges.emplace_back(State::PAUSED, Clock::now());
-    state = State::PAUSED;
-    duration += Clock::duration(stoptime - starttime);
-    PRECICE_DEBUG("Paused event {}", name);
-  }
+  auto timestamp = Clock::now();
+  PRECICE_ASSERT(_state == State::RUNNING, _name);
+  _state = State::PAUSED;
+
+  EventRegistry::instance().put('p', _name, timestamp);
 }
 
-Event::Clock::duration Event::getDuration() const
+void Event::resume()
 {
-  return duration;
+  auto timestamp = Clock::now();
+  PRECICE_ASSERT(_state == State::PAUSED, _name);
+  _state = State::RUNNING;
+
+  EventRegistry::instance().put('r', _name, timestamp);
+}
+
+void Event::stop()
+{
+  auto timestamp = Clock::now();
+  PRECICE_ASSERT(_state == State::RUNNING, _name);
+  _state = State::STOPPED;
+
+  EventRegistry::instance().put('e', _name, timestamp);
 }
 
 void Event::addData(const std::string &key, int value)
 {
-  data[key].push_back(value);
+  auto timestamp = Clock::now();
+  PRECICE_ASSERT(_state == State::RUNNING, _name);
+
+  EventRegistry::instance().put('d', _name, timestamp, key, value);
 }
 
 // -----------------------------------------------------------------------
@@ -83,6 +77,11 @@ ScopedEventPrefix::ScopedEventPrefix(std::string const &name)
 }
 
 ScopedEventPrefix::~ScopedEventPrefix()
+{
+  pop();
+}
+
+void ScopedEventPrefix::pop()
 {
   EventRegistry::instance().prefix = previousName;
 }
