@@ -87,6 +87,7 @@ void EventRegistry::startBackend()
   "run"  : "{}",
   "rank" : "{}",
   "size" : "{}",
+  "unix_ms" : "{}",
   "tinit": "{}"
   }},
   "events":[
@@ -95,6 +96,7 @@ void EventRegistry::startBackend()
              _runName,
              _rank,
              _size,
+             std::chrono::duration_cast<std::chrono::milliseconds>(_initTime.time_since_epoch()).count(),
              timepoint_to_string(_initTime));
   _output.flush();
   _writeQueue.clear();
