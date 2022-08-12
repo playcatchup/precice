@@ -3,32 +3,8 @@
 import json
 import sys
 
-
-
-
-
-#{
-#  "traceEvents": [
-#    {"name": "Asub", "cat": "PERF", "ph": "B", "pid": 22630, "tid": 22630, "ts": 829},
-#    {"name": "Asub", "cat": "PERF", "ph": "E", "pid": 22630, "tid": 22630, "ts": 833}
-#  ],
-#  "displayTimeUnit": "ns",
-#  "systemTraceEvents": "SystemTraceData",
-#  "otherData": {
-#    "version": "My Application v1.0"
-#  },
-#  "stackFrames": {...}
-#  "samples": [...],
-#}
-
-
-
-def totrace(filename):
-    with open(filename, 'r') as openfile:
-        content = json.load(openfile)
-
-    meta = content["meta"]
-
+def tracesFor(pid, tid, events):
+    # We currently interpret pause and result as stop and start
     phaseMap = {
         "b": "B",
         "p": "E",
@@ -36,37 +12,60 @@ def totrace(filename):
         "e": "E"
     }
 
-    pid = 0
-    tid = 0
-    cat = "preCICE"
-    name, rank = meta["name"], meta["rank"]
-    events = [
+    return [
         {
             "name": e["en"],
-            "cat": cat,
+            "cat": "Solver" if e["en"].startswith("solver") else "preCICE",
             "ph" : phaseMap[e["et"]],
             "pid" : pid,
             "tid" :tid,
             "ts" : e["ts"],
         }
-        for e in content["events"]
-        if e["et"] != "d"
+        for e in events
+        if e["et"] != "d" # we currently ignore the data events
     ]
 
-    metaEvents = [
-        {"name": "process_name", "ph": "M", "pid": pid, "tid": tid, "args": {"name" : name} },
-        {"name": "thread_name", "ph": "M", "pid": pid, "tid": tid, "args": {"name" : f"Rank {tid}"} }
-    ]
+def eventsToTraces(filenames):
+    pids = {}
+
+    allmeta = []
+    alltraces = []
+
+    for filename in filenames:
+        print(f"Processing {filename}")
+        with open(filename, 'r') as openfile:
+            content = json.load(openfile)
+
+        meta = content["meta"]
+        name, rank, size = meta["name"], int(meta["rank"]), int(meta["size"])
+
+        # Give new participants a unique id
+        if name not in pids:
+            pids[name] = len(pids)
+        pid = pids[name]
+
+        print(f"  participant {name} ({pid}) rank {rank}")
+
+        rankName = "Primary" if rank == 0 else "Secondary"
+
+        metaEvents = [
+            {"name": "process_name", "ph": "M", "pid": pid, "tid": rank, "args": {"name" : name} },
+            {"name": "thread_name", "ph": "M", "pid": pid, "tid": rank, "args": {"name" : rankName } }
+        ]
+
+        allmeta += metaEvents
+        alltraces += tracesFor(pid, rank, content["events"])
 
     return {
-        "traceEvents": metaEvents + events,
-        "displayTimeUnit": "ms"
+        "traceEvents": allmeta + alltraces
     }
 
-
-if __name__ == '__main__':
-    trace = totrace("precice-Fluid-0-1.json")
+def traceCommand(filenames, outfile):
+    trace = eventsToTraces(filenames)
     json_object = json.dumps(trace, indent=2)
-    with open("trace.json", "w") as outfile:
+    print(f"Writing to {outfile}")
+    with open(outfile, "w") as outfile:
         outfile.write(json_object)
 
+if __name__ == '__main__':
+    traceCommand(sys.argv[1:], "trace.json")
