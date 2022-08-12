@@ -31,6 +31,9 @@ def eventsToTraces(filenames):
     allmeta = []
     alltraces = []
 
+    # Collect startTimes of all (participant, ranks)
+    startTimes = { }
+
     for filename in filenames:
         print(f"Processing {filename}")
         with open(filename, 'r') as openfile:
@@ -44,6 +47,8 @@ def eventsToTraces(filenames):
             pids[name] = len(pids)
         pid = pids[name]
 
+        startTimes[(pid, rank)] = int(meta["unix_ms"])
+
         print(f"  participant {name} ({pid}) rank {rank}")
 
         rankName = "Primary" if rank == 0 else "Secondary"
@@ -55,6 +60,24 @@ def eventsToTraces(filenames):
 
         allmeta += metaEvents
         alltraces += tracesFor(pid, rank, content["events"])
+
+    # Align traces
+    if len(filenames) > 1:
+        print("Aligning traces")
+
+        firstStart = min(startTimes.values())
+        timeCorrection = {
+            (pid, tid): initTime-firstStart
+            for ((pid, tid), initTime) in startTimes.items()
+        }
+        assert(startTimes.keys() == timeCorrection.keys())
+        assert(all([ dt >= 0 for dt in timeCorrection.values() ]))
+        print(f"Time corr {timeCorrection}")
+
+        for i, item in enumerate(alltraces):
+            if "ts" in item:
+                pid, rank, ts = (item[e] for e in ["pid", "tid", "ts"])
+                alltraces[i]["ts"] = int(ts)+timeCorrection[(pid, rank)]
 
     return {
         "traceEvents": allmeta + alltraces
