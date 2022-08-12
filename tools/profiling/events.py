@@ -72,7 +72,6 @@ def eventsToTraces(filenames):
         }
         assert(startTimes.keys() == timeCorrection.keys())
         assert(all([ dt >= 0 for dt in timeCorrection.values() ]))
-        print(f"Time corr {timeCorrection}")
 
         for i, item in enumerate(alltraces):
             if "ts" in item:
