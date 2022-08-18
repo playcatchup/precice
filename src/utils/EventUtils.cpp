@@ -87,7 +87,7 @@ void EventRegistry::startBackend()
   "run"  : "{}",
   "rank" : "{}",
   "size" : "{}",
-  "unix_ms" : "{}",
+  "unix_us" : "{}",
   "tinit": "{}"
   }},
   "events":[

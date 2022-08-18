@@ -1,0 +1,424 @@
+#!python
+
+import json
+import csv
+import sys
+import datetime
+import argparse
+
+
+def requireModules(modules):
+    import importlib
+    notFound = [m for m in modules if importlib.util.find_spec(m) is None]
+    if (notFound):
+        def concat(l):
+            if len(l) == 1:
+                return l[0]
+            else:
+                return ", ".join(l[:-1]) + f", and {l[-1]}"
+        print(f"This command requires the following additional dependencies: {concat(modules)}")
+        print(f"The following is/are missing: {concat(notFound)}")
+        sys.exit(1)
+
+
+def loadRobust(content):
+    try:
+        return json.loads(content)
+    except json.decoder.JSONDecodeError:
+        print("Damaged input detected")
+        content += "]}"
+        return json.loads(content)
+
+
+def readRobust(filename):
+    with open(filename, 'r') as openfile:
+        return loadRobust(openfile.read())
+
+
+def printWide(df):
+    import pandas
+    with pandas.option_context('display.width', None,
+                               'display.max_rows', None,
+                               'display.max_columns', None,
+                               'display.max_colwidth', None):
+        print(df)
+
+
+def ns_to_unit(obj, unit):
+    import pandas
+    if isinstance(obj, (pandas.Timedelta, pandas.Timestamp)):
+        return ns_to_unit(obj.value, unit)
+
+    return obj * {
+        'ns': 1,
+        'us': 1e-3,
+        'ms': 1e-6,
+        's': 1e-9,
+        'm': 1e-9/60,
+        'h': 1e-9/3600
+    }[unit]
+
+
+def groupEvents(events, initTime):
+    completed = []
+    active = {}  # name to event data
+
+    for event in events:
+        type = event["et"]
+        name = event["en"]
+        # Handle event starts
+        if type in "br":
+            # assert(name not in active.keys())
+            if (name in active.keys()):
+                print(f"Ignoring start of active event {name}")
+            else:
+                event["ts"] = int(event["ts"])
+                active[name] = event
+        # Handle event stops
+        elif type in "ep":
+            # assert(name in active.keys())
+            if (name not in active.keys()):
+                print(f"Ignoring end of inactive event {name}")
+            else:
+                begin = active[name]
+                active.pop(name)
+                begin["dur"] = int(event["ts"]) - begin["ts"]
+                begin["ts"] = int(begin["ts"]) + initTime
+                begin.pop("et")
+                completed.append(begin)
+        # Handle event data
+        elif type == "d":
+            if (name not in active.keys()):
+                print(f"!! {name} not yet active")
+            else:
+                d = active[name].get("data", {})
+                d[event["dn"]] = int(event["dv"])
+                active[name]["data"] = d
+
+    # Handle leftover events in case of a truncated input file
+    if active:
+        lastTS = min(map(lambda e: e["ts"] + e["dur"], completed))
+        for event in active.values():
+            name = event["en"]
+            print(f"Truncating event without end {name}")
+            begin = active[name]
+            begin["ts"] = int(begin["ts"]) + initTime
+            begin["dur"] = lastTS/scale - begin["ts"]
+            begin.pop("et")
+            completed.append(begin)
+
+    return sorted(completed, key=lambda e: e["ts"])
+
+
+class Events:
+    def __init__(self, content=None, filename=None):
+        """Read preCICE event data from a single rank.
+        Pass the filename or its content using the arguments.
+        All durations and timestamps are in microseconds.
+
+        Arguments:
+        content      -- the content of a preCICE events file
+        filename     -- the filename of a preCICE events file to read
+        """
+        if (filename):
+            print(f"Loading events from {filename}")
+            content = open(filename, "r").read()
+        if (content):
+            json = loadRobust(content)
+
+        self.name = json["meta"]["name"]
+        self.rank = int(json["meta"]["rank"])
+        self.size = int(json["meta"]["size"])
+        self.unix_us = int(json["meta"]["unix_us"])
+        self.tinit = json["meta"]["tinit"]
+
+        self.events = groupEvents(json["events"], self.unix_us)
+
+    def __lt__(self, other):
+        """Allows to sort events by name, rank"""
+        return (self.name, self.rank) < (other.name, other.rank)
+
+    def filter(self, events):
+        """Keep only the provided events"""
+        self.events = [e for e in self.events if e["en"] in events]
+        return self
+
+    def toDataFrame(self, origin=False):
+        """Return the events as a pandas.DataFrame
+        Adds the participant and the rank if origin is True
+        """
+        import pandas
+        df = pandas.DataFrame(self.events)
+        if "data" in df:
+            df.drop("data", axis=1, inplace=True)
+        df["dur"] = pandas.to_timedelta(df["dur"], unit='microseconds')
+        df["ts"] = pandas.to_datetime(df["ts"], unit="us", origin="unix")
+
+        if origin:
+            df.insert(0, 'participant', self.name)
+            df.insert(1, 'rank', self.rank)
+
+        return df
+
+    def summary(self, outfile, unit):
+        import pandas
+        df = self.toDataFrame()
+        df["dur"] = df["dur"].apply(lambda dur: ns_to_unit(dur, unit))
+        df = df.groupby("en").aggregate(
+            {"dur": ["min", "max", "sum", "count", "mean", "var"]})
+        df.columns = df.columns.droplevel()
+        df.sort_values("sum", ascending=False, inplace=True)
+        printWide(df)
+        if outfile:
+            print(f"Summary written to {outfile}")
+            df.to_csv(outfile)
+
+    def toTrace(self, pid=0, shift=None):
+        rankName = "Primary" if self.rank == 0 else "Secondary"
+        metaEvents = [
+            {"name": "process_name", "ph": "M", "pid": pid,
+                "tid": self.rank, "args": {"name": self.name}},
+            {"name": "thread_name", "ph": "M", "pid": pid,
+                "tid": self.rank, "args": {"name": rankName}}
+        ]
+        mainEvents = [
+            {
+                "name": e["en"],
+                "cat": "Solver" if e["en"].startswith("solver") else "preCICE",
+                "ph": "X",  # complete event
+                "pid": pid,
+                "tid": self.rank,
+                "ts": e["ts"] + shift if shift else e["ts"],
+                "dur": e["dur"]
+            } | {} if "data" not in e else {"args": e["data"]}
+            for e in self.events
+        ]
+
+    def toExportList(self, shift=None, unit=None):
+        return [
+            {
+                "participant": self.name,
+                "rank": self.rank,
+                "size": self.size,
+                "event": e["en"],
+                "timestamp": e["ts"] + shift if shift else e["ts"],
+                "duration": ns_to_unit(e["dur"]*1000, unit) if unit else e["dur"],
+                "data": "" if "data" not in e else str(e["data"])
+            }
+            for e in self.events
+        ]
+
+
+def summaryCommand(filename, outfile, unit):
+    requireModules(["pandas"])
+    ev = Events(filename=filename)
+    ev.summary(outfile, unit)
+
+
+def traceCommand(filenames, outfile):
+    events = sorted([Events(filename=fn) for fn in filenames])
+    startTime = min([e.unix_us for e in events])
+    pids = {name: pid for pid, name in enumerate(
+        set([e.name for e in events]))}
+
+    print(
+        f"Trace started at {datetime.datetime.fromtimestamp(float(startTime)/1e6)}")
+    traces = None
+    for e in events:
+        pid = pids.get(e.name)
+        shift = startTime-e.unix_us
+        print(f" - {e.name:20}:{e.rank:4} at {-shift:+10,} us")
+        trace = e.toTrace(pid, shift)
+        if traces:
+            traces["traceEvents"] += trace["traceEvents"]
+        else:
+            traces = trace
+
+    json_object = json.dumps(traces, indent=2)
+    print(f"Writing to {outfile}")
+    with open(outfile, "w") as outfile:
+        outfile.write(json_object)
+
+
+def exportCommand(filenames, outfile, unit):
+    events = sorted([Events(filename=fn) for fn in filenames])
+    startTime = min([e.unix_us for e in events])
+    print(
+        f"Trace started at {datetime.datetime.fromtimestamp(float(startTime)/1e6)}")
+    total = []
+    for e in events:
+        shift = startTime-e.unix_us
+        print(f" - {e.name:20}:{e.rank:4} at {-shift:+10,} us")
+        total += e.toExportList(shift, unit)
+
+    fieldnames = total[0].keys()
+    print(f"Writing to {outfile}")
+    with open(outfile, 'w', newline='') as csvfile:
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(total)
+
+
+def plotCommand(events, filenames, unit):
+    requireModules(["pandas", "matplotlib"])
+    import pandas
+    import matplotlib.pyplot as plt
+    import matplotlib
+
+    def to_unit(o): return ns_to_unit(o, unit)
+    loadedEvents = sorted([Events(filename=fn).filter(events)
+                          for fn in filenames])
+
+    # create dataframe containing all events
+    dfs = []
+    for event in loadedEvents:
+        if not event.events:
+            continue
+        df = event.toDataFrame(origin=True)
+        dfs.append(df)
+
+    total = pandas.concat(dfs, ignore_index=True)
+
+    allRanks = list(total[["participant", "rank"]
+                          ].drop_duplicates().itertuples(index=False))
+    colorMap = {pr: c for pr, c in zip(
+        allRanks, matplotlib.cm.tab20(range(len(allRanks))))}
+
+    nevents = len(events)
+    fig, axs = plt.subplots(nrows=nevents, sharex=True)
+    for event, ax in zip(events, axs if nevents > 1 else [axs]):
+        ax.set_title(event)
+        ax.margins(y=0.2)
+        edf = total[total["en"] == event]
+
+        yticks = []
+
+        for i, (name, group) in enumerate(edf.groupby(["participant", "rank"])):
+            ax.hlines([str(i)]*len(group.ts),
+                      xmin=group.ts.apply(to_unit),
+                      xmax=(group.ts+group.dur).apply(to_unit),
+                      colors=colorMap[name],
+                      linewidth=2
+                      )
+            yticks.append(f"{name[0]}:{name[1]}")
+
+        ax.yaxis.set_major_locator(
+            matplotlib.ticker.FixedLocator(ax.get_yticks()))
+        ax.grid(axis="y", color='0.9')
+        ax.yaxis.tick_right()
+        ax.set_yticklabels(yticks)
+
+    plt.tight_layout()
+    plt.show()
+
+
+def analyzeCommand(filenames, outfile=None, unit='us'):
+    requireModules(["pandas"])
+    import pandas
+    if len(filenames) <= 1:
+        print("the analyze command only makes sense for analyzing multiple files of a parallel participant")
+        print("consider using summary for serial participants")
+        return
+
+    events = sorted([Events(filename=fn) for fn in filenames])
+    names = set([e.name for e in events])
+    if len(names) > 1:
+        print(
+            f"Files must all represent the same participant, yet they represent {' and '.join(names)}.")
+        return
+
+    df = pandas.concat([e.toDataFrame(origin=True) for e in events])
+    df.drop("participant", axis=1, inplace=True)
+    df.dur = df.dur.apply(lambda td: ns_to_unit(td, unit))
+
+    result = pandas.DataFrame()
+
+    all = df.groupby("en").agg(
+        {"dur": [("min", "min"), ("mean", "mean"), ("max", "max"), ("sum", "sum")]})
+    primary = df[df["rank"] == 0].groupby("en").agg(
+        {"dur": [("Pmin", "min"), ("Pmean", "mean"), ("Pmax", "max"), ("Psum", "sum")]})
+    secondaries = df[df["rank"] > 0].groupby("en").agg(
+        {"dur": [("Smin", "min"), ("Smean", "mean"), ("Smax", "max"), ("Ssum", "sum")]})
+
+    all.columns = all.columns.droplevel()
+    primary.columns = primary.columns.droplevel()
+    secondaries.columns = secondaries.columns.droplevel()
+
+    joined = pandas.concat([all, primary, secondaries], axis=1)
+    joined.index.rename("event", inplace=True)
+    printWide(joined)
+    if (outfile):
+        print(f"Writing to {outfile}")
+        joined.to_csv(outfile)
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description="", epilog="")
+    subparsers = parser.add_subparsers(title='commands',
+                                       description='Note that some commands may require pandas or matplotlib',
+                                       help='additional help',
+                                       dest="cmd"
+                                       )
+    # parser.add_argument("-v", "--verbose", help="Print verbose output")
+    parser.add_argument("-u", "--unit", choices=["h", "m", "s", "ms", "us"], default="us",
+                        help="The duration unit to use")
+
+    summary_help = """Prints a summary of a single event file.
+    Events durations are displayed in the unit of choice.
+    """
+    summary = subparsers.add_parser('summary', help=summary_help.splitlines()[
+                                    0], description=summary_help)
+    summary.add_argument("file", help="The event file to process")
+    summary.add_argument("-o", "--output",
+                         help="Write the result to CSV file.")
+
+    analyze_help = """Analyze events of multiple event files of the same solver.
+    Events durations are displayed in the unit of choice and grouped in three sections:
+    Aggregates over all ranks, only the Primary rank, and only the Secondary ranks.
+    """
+    analyze = subparsers.add_parser('analyze',
+                                    help=analyze_help.splitlines()[0], description=analyze_help)
+    analyze.add_argument("files", nargs="+",
+                         help="The event files to process")
+    analyze.add_argument("-o", "--output",
+                         help="Write the result to CSV file")
+
+    trace_help = "Transform multiple events to the Trace Event Format."
+    trace = subparsers.add_parser('trace',
+                                  help=trace_help.splitlines()[0], description=trace_help)
+    trace.add_argument("files", nargs="+",
+                       help="The event files to process")
+    trace.add_argument("-o", "--output", default="trace.json",
+                       help="The resulting trace file")
+
+    export_help = "Transform multiple events to the Trace Event Format."
+    export = subparsers.add_parser('export',
+                                   help=export_help.splitlines()[0], description=export_help)
+    export.add_argument("files", nargs="+",
+                        help="The event files to process")
+    export.add_argument("-o", "--output", type=str, default="events.csv",
+                        help="The CSV file to export to.")
+
+    plot_help = "Plot given events for given event files."
+    plot = subparsers.add_parser('plot',
+                                 help=plot_help.splitlines()[0], description=plot_help)
+    plot.add_argument("events", type=str,
+                      help="The events to plot")
+    plot.add_argument("files", nargs="+",
+                      help="The event files to process")
+
+    args = parser.parse_args()
+
+    dispatcher = {
+        "trace": lambda ns: traceCommand(ns.files, ns.output),
+        "export": lambda ns: exportCommand(ns.files, ns.output, ns.unit),
+        "analyze": lambda ns: analyzeCommand(ns.files, ns.output,  ns.unit),
+        "summary": lambda ns: summaryCommand(ns.file, ns.output,  ns.unit),
+        "plot": lambda ns: plotCommand(ns.events.split(","), ns.files,  ns.unit),
+    }
+
+    def showHelp(ns):
+        parser.print_help()
+        return 1
+
+    sys.exit(dispatcher.get(args.cmd, showHelp)(args))

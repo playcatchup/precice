@@ -366,6 +366,12 @@ if (PRECICE_BUILD_TOOLS)
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     BYPRODUCTS binprecice
     )
+
+  # Link or copy the events script to the binary directory
+  file(CREATE_LINK
+    ${preCICE_SOURCE_DIR}/tools/profiling/precice-events
+    ${preCICE_BINARY_DIR}/precice-events
+    COPY_ON_ERROR SYMBOLIC)
 endif()
 
 #
@@ -455,6 +461,9 @@ if(PRECICE_BUILD_TOOLS)
   # Install the binprecice link for backwards compatibility
   # TODO remove in 3.0.0
   install(FILES ${CMAKE_CURRENT_BINARY_DIR}/binprecice DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+  install(FILES ${preCICE_SOURCE_DIR}/tools/profiling/precice-events
+    DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
 
 if(BUILD_TESTING AND PRECICE_InstallTest)

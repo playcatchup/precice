@@ -212,9 +212,6 @@ void SolverInterfaceImpl::configure(
 {
   PRECICE_TRACE();
 
-  Event                    e("configure"); // no precice::syncMode as this is not yet configured here
-  utils::ScopedEventPrefix sep("configure/");
-
   _meshLock.clear();
 
   _dimensions         = config.getDimensions();
@@ -258,7 +255,6 @@ void SolverInterfaceImpl::configure(
     initializeIntraCommunication();
   }
 
-  sep.pop();
   utils::IntraComm::synchronize();
   _solverInitEvent = std::make_unique<utils::Event>("solver.initialize");
 }
@@ -392,6 +388,8 @@ void SolverInterfaceImpl::initializeData()
   resetWrittenData();
   PRECICE_DEBUG("Plot output");
   _accessor->exportFinal();
+  e.stop();
+  sep.pop();
   utils::IntraComm::synchronize();
   _solverInitEvent->resume();
 
