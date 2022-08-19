@@ -1,7 +1,6 @@
 #include "EventUtils.hpp"
 #include <algorithm>
 #include <array>
-#include <bits/chrono.h>
 #include <cassert>
 #include <ctime>
 #include <fstream>
@@ -67,6 +66,11 @@ void EventRegistry::initialize(std::string applicationName, std::string filePref
   _finalized   = false;
 }
 
+void EventRegistry::setWriteQueueMax(std::size_t size)
+{
+  _writeQueueMax = size;
+}
+
 void EventRegistry::startBackend()
 {
   if (_prefix.empty()) {
@@ -130,6 +134,9 @@ void EventRegistry::clear()
 void EventRegistry::put(PendingEvent pe)
 {
   _writeQueue.push_back(std::move(pe));
+  if (_writeQueueMax > 0 && _writeQueue.size() > _writeQueueMax) {
+    flush();
+  }
 }
 
 void EventRegistry::flush()

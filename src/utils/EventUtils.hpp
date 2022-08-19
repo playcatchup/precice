@@ -1,6 +1,7 @@
 #pragma once
 
 #include <chrono>
+#include <cstddef>
 #include <iosfwd>
 #include <map>
 #include <stddef.h>
@@ -51,6 +52,9 @@ public:
    */
   void initialize(std::string applicationName = "", std::string runName = "", int rank = 0, int size = 1);
 
+  /// Sets the maximum size of the writequeue before calling flush(). Use 0 to flush on destruction.
+  void setWriteQueueMax(std::size_t size);
+
   /// Sets the global end time
   void finalize();
 
@@ -86,6 +90,7 @@ private:
   EventRegistry() = default;
 
   std::vector<PendingEvent> _writeQueue;
+  std::size_t               _writeQueueMax = 0;
 
   std::ofstream _output;
 
