@@ -245,15 +245,15 @@ class Events:
         ]
         return {"traceEvents": metaEvents + mainEvents}
 
-    def toExportList(self, shift=None, unit=None):
+    def toExportList(self, unit=None):
         return [
             {
                 "participant": self.name,
                 "rank": self.rank,
                 "size": self.size,
                 "event": e["en"],
-                "timestamp": e["ts"] + shift if shift else e["ts"],
-                "duration": ns_to_unit(e["dur"]*1000, unit) if unit else e["dur"],
+                "timestamp": e["ts"],
+                "duration": ns_to_unit(e["dur"]*1e3, unit) if unit else e["dur"],
                 "data": "" if "data" not in e else str(e["data"])
             }
             for e in self.events
@@ -307,14 +307,10 @@ def traceCommand(filenames, outfile):
 
 def exportCommand(filenames, outfile, unit):
     events = sorted([Events(filename=fn) for fn in filenames])
-    startTime = min([e.unix_us for e in events])
-    print(
-        f"Trace started at {datetime.datetime.fromtimestamp(float(startTime)/1e6)}")
+    events = alignEvents(events)
     total = []
     for e in events:
-        shift = startTime-e.unix_us
-        print(f" - {e.name:20}:{e.rank:4} at {-shift:+10,} us")
-        total += e.toExportList(shift, unit)
+        total += e.toExportList(unit)
 
     fieldnames = total[0].keys()
     print(f"Writing to {outfile}")
