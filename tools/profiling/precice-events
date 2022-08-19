@@ -76,10 +76,12 @@ def alignEvents(events):
         if len(group) == 1:
             continue
         print(f"Aligning {len(group)} ranks of {participant}")
+        syncs = {e.rank: e.intraSyncPoint() for e in group}
+        firstSync = min(syncs.values())
+        shifts = {rank: firstSync-tp for rank, tp in syncs.items()}
 
-        first = min([e.unix_us for e in group])
         for e in group:
-            e.shiftTo(first)
+            e.shiftBy(shifts[e.rank])
 
     if len(grouped) == 1:
         return events
@@ -89,7 +91,7 @@ def alignEvents(events):
     for lonely in participants.difference(primaries):
         print(f"Cannot align {lonely} as event file of rank 0 is missing.")
 
-    syncs = {e.name: e.synchronizationPoints() for e in events if e.rank == 0}
+    syncs = {e.name: e.interSyncPoints() for e in events if e.rank == 0}
     def hasSync(l, r): return syncs.get(l) and syncs.get(
         l).get(r) and syncs.get(r) and syncs.get(r).get(l)
     shifts = {
@@ -102,7 +104,7 @@ def alignEvents(events):
         if hasSync(local, remote)
     }
     for (local, remote), shift in shifts.items():
-        print(f"Aligning {remote} with {local} ({shift}us)")
+        print(f"Aligning {remote} ({shift}us) with {local}")
         for e in grouped[remote]:
             e.shiftBy(shift)
 
@@ -259,15 +261,20 @@ class Events:
             for e in self.events
         ]
 
-    def shiftTo(self, newInit):
-        self.shiftBy(newInit - self.unix_us)
-
     def shiftBy(self, us):
         self.unix_us += us
         for e in self.events:
             e["ts"] += us
 
-    def synchronizationPoints(self):
+    def intraSyncPoint(self):
+        syncEvent = "com.initializeIntraCom"
+        for e in self.events:
+            if e["en"] == "com.initializeIntraCom":
+                return e["ts"]+e["dur"]
+        return None
+
+
+    def interSyncPoints(self):
         syncEvents = ["m2n.acceptPrimaryRankConnection.",
                       "m2n.requestPrimaryRankConnection."]
         return {

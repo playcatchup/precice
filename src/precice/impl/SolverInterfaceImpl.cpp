@@ -212,6 +212,9 @@ void SolverInterfaceImpl::configure(
 {
   PRECICE_TRACE();
 
+  utils::EventRegistry::instance().initialize(_accessorName, "precice", _accessorProcessRank, _accessorCommunicatorSize);
+  Event e("configure");
+
   _meshLock.clear();
 
   _dimensions         = config.getDimensions();
@@ -247,8 +250,8 @@ void SolverInterfaceImpl::configure(
     _meshLock.add(meshContext->mesh->getID(), false);
   }
 
-  utils::IntraComm::barrier();
-  utils::EventRegistry::instance().initialize(_accessorName, "precice", _accessorProcessRank, _accessorCommunicatorSize);
+  e.stop();
+
   /// @todo make this block size configurable
   utils::EventRegistry::instance().setWriteQueueMax(1000);
 
@@ -2094,6 +2097,7 @@ void SolverInterfaceImpl::initializeIntraCommunication()
   utils::IntraComm::getCommunication()->connectIntraComm(
       _accessorName, "IntraComm",
       _accessorProcessRank, _accessorCommunicatorSize);
+  utils::IntraComm::barrier();
 }
 
 void SolverInterfaceImpl::syncTimestep(double computedTimestepLength)
