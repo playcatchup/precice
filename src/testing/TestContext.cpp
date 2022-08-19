@@ -203,7 +203,7 @@ void TestContext::initializeIntraComm()
 void TestContext::initializeEvents()
 {
   if (!invalid && _events) {
-    precice::utils::EventRegistry::instance().initialize("precice-Tests", "", rank, size);
+    precice::utils::EventRegistry::instance().initialize(name, "testprecice", rank, size);
   }
 }
 
