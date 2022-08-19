@@ -248,7 +248,7 @@ void SolverInterfaceImpl::configure(
   }
 
   utils::IntraComm::barrier();
-  utils::EventRegistry::instance().initialize("precice-" + _accessorName, "", _accessorProcessRank, _accessorCommunicatorSize);
+  utils::EventRegistry::instance().initialize(_accessorName, "precice", _accessorProcessRank, _accessorCommunicatorSize);
 
   PRECICE_DEBUG("Initialize intra-participant communication");
   if (utils::IntraComm::isParallel()) {

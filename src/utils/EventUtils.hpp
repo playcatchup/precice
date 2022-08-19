@@ -45,7 +45,7 @@ public:
   /// Sets the global start time
   /**
    * @param[in] applicationName A name that is added to the logfile to distinguish different participants
-   * @param[in] runName A name of the run, will be printed as a separate column with each Event.
+   * @param[in] filePrefix A prefix for the file name.
    * @param[in] rank the current number of the parallel instance
    * @param[in] size the total number of a parallel instances
    */
@@ -75,8 +75,8 @@ private:
   /// A name that is added to the logfile to distinguish different participants
   std::string _applicationName;
 
-  /// A name that is added to the logfile to identify a run
-  std::string _runName;
+  /// The optional file prefix, may be empty
+  std::string _prefix;
 
   int _rank;
 

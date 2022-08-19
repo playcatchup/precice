@@ -49,13 +49,13 @@ EventRegistry &EventRegistry::instance()
   return instance;
 }
 
-void EventRegistry::initialize(std::string applicationName, std::string runName, int rank, int size)
+void EventRegistry::initialize(std::string applicationName, std::string filePrefix, int rank, int size)
 {
   auto initClock = Event::Clock::now();
   auto initTime  = std::chrono::system_clock::now();
 
   this->_applicationName = std::move(applicationName);
-  this->_runName         = std::move(runName);
+  this->_prefix          = std::move(filePrefix);
   this->_rank            = rank;
   this->_size            = size;
   this->_initTime        = initTime;
@@ -69,14 +69,14 @@ void EventRegistry::initialize(std::string applicationName, std::string runName,
 
 void EventRegistry::startBackend()
 {
-  if (_runName.empty()) {
+  if (_prefix.empty()) {
     _output.open(fmt::format(
         "{}-{}-{}.json",
         _applicationName, _rank, _size));
   } else {
     _output.open(fmt::format(
         "{}-{}-{}-{}.json",
-        _applicationName, _rank, _size, _runName));
+        _prefix, _applicationName, _rank, _size));
   }
 
   // write header
@@ -84,7 +84,6 @@ void EventRegistry::startBackend()
              R"({{
   "meta":{{
   "name" : "{}",
-  "run"  : "{}",
   "rank" : "{}",
   "size" : "{}",
   "unix_us" : "{}",
@@ -93,7 +92,6 @@ void EventRegistry::startBackend()
   "events":[
     {{"et":"b","en":"_GLOBAL","ts":"0"}})",
              _applicationName,
-             _runName,
              _rank,
              _size,
              std::chrono::duration_cast<std::chrono::microseconds>(_initTime.time_since_epoch()).count(),

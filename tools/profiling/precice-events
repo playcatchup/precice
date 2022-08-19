@@ -16,7 +16,8 @@ def requireModules(modules):
                 return l[0]
             else:
                 return ", ".join(l[:-1]) + f", and {l[-1]}"
-        print(f"This command requires the following additional dependencies: {concat(modules)}")
+        print(
+            f"This command requires the following additional dependencies: {concat(modules)}")
         print(f"The following is/are missing: {concat(notFound)}")
         sys.exit(1)
 
@@ -57,6 +58,55 @@ def ns_to_unit(obj, unit):
         'm': 1e-9/60,
         'h': 1e-9/3600
     }[unit]
+
+
+def alignEvents(events):
+    """Alignes passed events of multiple ranks and or participants.
+    All ranks of a participant align at initialization, ensured by a barrier in preCICE.
+    Primary ranks of all participants align after successfully establishing primary connections.
+    """
+    participants = set([e.name for e in events])
+    grouped = {
+        p: [e for e in events if e.name == p]
+        for p in participants
+    }
+
+    # Align ranks of each participant
+    for participant, group in grouped.items():
+        if len(group) == 1:
+            continue
+        print(f"Aligning {len(group)} ranks of {participant}")
+
+        first = min([e.unix_us for e in group])
+        for e in group:
+            e.shiftTo(first)
+
+    if len(grouped) == 1:
+        return events
+
+    # Align participants
+    primaries = set(e.name for e in events if e.rank == 0)
+    for lonely in participants.difference(primaries):
+        print(f"Cannot align {lonely} as event file of rank 0 is missing.")
+
+    syncs = {e.name: e.synchronizationPoints() for e in events if e.rank == 0}
+    def hasSync(l, r): return syncs.get(l) and syncs.get(
+        l).get(r) and syncs.get(r) and syncs.get(r).get(l)
+    shifts = {
+        (local, remote): syncs[local][remote] - syncs[remote][local]
+
+        # all unique participant combinations
+        for local in primaries
+        for remote in primaries
+        if local < remote
+        if hasSync(local, remote)
+    }
+    for (local, remote), shift in shifts.items():
+        print(f"Aligning {remote} with {local} ({shift}us)")
+        for e in grouped[remote]:
+            e.shiftBy(shift)
+
+    return events
 
 
 def groupEvents(events, initTime):
@@ -103,7 +153,7 @@ def groupEvents(events, initTime):
             print(f"Truncating event without end {name}")
             begin = active[name]
             begin["ts"] = int(begin["ts"]) + initTime
-            begin["dur"] = lastTS/scale - begin["ts"]
+            begin["dur"] = lastTS - begin["ts"]
             begin.pop("et")
             completed.append(begin)
 
@@ -173,7 +223,7 @@ class Events:
             print(f"Summary written to {outfile}")
             df.to_csv(outfile)
 
-    def toTrace(self, pid=0, shift=None):
+    def toTrace(self, pid=0):
         rankName = "Primary" if self.rank == 0 else "Secondary"
         metaEvents = [
             {"name": "process_name", "ph": "M", "pid": pid,
@@ -188,11 +238,12 @@ class Events:
                 "ph": "X",  # complete event
                 "pid": pid,
                 "tid": self.rank,
-                "ts": e["ts"] + shift if shift else e["ts"],
+                "ts": e["ts"],
                 "dur": e["dur"]
             } | {} if "data" not in e else {"args": e["data"]}
             for e in self.events
         ]
+        return {"traceEvents": metaEvents + mainEvents}
 
     def toExportList(self, shift=None, unit=None):
         return [
@@ -208,6 +259,23 @@ class Events:
             for e in self.events
         ]
 
+    def shiftTo(self, newInit):
+        self.shiftBy(newInit - self.unix_us)
+
+    def shiftBy(self, us):
+        self.unix_us += us
+        for e in self.events:
+            e["ts"] += us
+
+    def synchronizationPoints(self):
+        syncEvents = ["m2n.acceptPrimaryRankConnection.",
+                      "m2n.requestPrimaryRankConnection."]
+        return {
+            e["en"].split(".")[-1]: e["ts"]+e["dur"]
+            for e in self.events
+            if any([en in e["en"] for en in syncEvents])
+        }
+
 
 def summaryCommand(filename, outfile, unit):
     requireModules(["pandas"])
@@ -216,19 +284,16 @@ def summaryCommand(filename, outfile, unit):
 
 
 def traceCommand(filenames, outfile):
+
     events = sorted([Events(filename=fn) for fn in filenames])
-    startTime = min([e.unix_us for e in events])
+    events = alignEvents(events)
+
     pids = {name: pid for pid, name in enumerate(
         set([e.name for e in events]))}
-
-    print(
-        f"Trace started at {datetime.datetime.fromtimestamp(float(startTime)/1e6)}")
     traces = None
     for e in events:
         pid = pids.get(e.name)
-        shift = startTime-e.unix_us
-        print(f" - {e.name:20}:{e.rank:4} at {-shift:+10,} us")
-        trace = e.toTrace(pid, shift)
+        trace = e.toTrace(pid)
         if traces:
             traces["traceEvents"] += trace["traceEvents"]
         else:
@@ -267,7 +332,7 @@ def plotCommand(events, filenames, unit):
 
     def to_unit(o): return ns_to_unit(o, unit)
     loadedEvents = sorted([Events(filename=fn).filter(events)
-                          for fn in filenames])
+                           for fn in filenames])
 
     # create dataframe containing all events
     dfs = []
@@ -367,7 +432,7 @@ if __name__ == '__main__':
     Events durations are displayed in the unit of choice.
     """
     summary = subparsers.add_parser('summary', help=summary_help.splitlines()[
-                                    0], description=summary_help)
+        0], description=summary_help)
     summary.add_argument("file", help="The event file to process")
     summary.add_argument("-o", "--output",
                          help="Write the result to CSV file.")
