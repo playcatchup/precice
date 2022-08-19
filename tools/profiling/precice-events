@@ -329,6 +329,7 @@ def plotCommand(events, filenames, unit):
     def to_unit(o): return ns_to_unit(o, unit)
     loadedEvents = sorted([Events(filename=fn).filter(events)
                            for fn in filenames])
+    loadedEvents = alignEvents(loadedEvents)
 
     # create dataframe containing all events
     dfs = []
