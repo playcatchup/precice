@@ -89,9 +89,11 @@ void BaseCouplingScheme::sendData(const m2n::PtrM2N &m2n, const DataMap &sendDat
   for (const DataMap::value_type &pair : sendData) {
     // Data is actually only send if size>0, which is checked in the derived classes implementation
     m2n->send(pair.second->values(), pair.second->getMeshID(), pair.second->getDimensions());
+    pair.second->values().setZero();
 
     if (pair.second->hasGradient()) {
       m2n->send(pair.second->gradientValues(), pair.second->getMeshID(), pair.second->getDimensions() * pair.second->meshDimensions());
+      pair.second->values().setZero();
     }
 
     sentDataIDs.push_back(pair.first);
