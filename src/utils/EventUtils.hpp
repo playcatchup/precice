@@ -63,7 +63,7 @@ public:
    * @param[in] rank the current number of the parallel instance
    * @param[in] size the total number of a parallel instances
    */
-  void initialize(std::string applicationName = "", std::string runName = "", int rank = 0, int size = 1);
+  void initialize(std::string applicationName, std::string filePrefix = "", int rank = 0, int size = 1);
 
   /// Sets the maximum size of the writequeue before calling flush(). Use 0 to flush on destruction.
   void setWriteQueueMax(std::size_t size);
