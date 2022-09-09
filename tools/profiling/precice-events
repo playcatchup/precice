@@ -261,6 +261,21 @@ class Events:
             for e in self.events
         ]
 
+    def compressWith(self, compressDict):
+        return {
+            "meta": {
+                "name": self.name,
+                "rank": self.rank,
+                "size": self.size,
+                "unix_us": self.unix_us,
+                "tinit": self.tinit,
+            },
+            "events": [
+                e | {"en" : compressDict.get(e["en"]) }
+                for e in self.events
+            ]
+        }
+
     def shiftBy(self, us):
         self.unix_us += us
         for e in self.events:
@@ -421,6 +436,46 @@ def analyzeCommand(filenames, outfile=None, unit='us'):
         joined.to_csv(outfile)
 
 
+def mergeCommand(files, outfile, align):
+    if not files:
+        import glob
+        files = glob.glob("precice-*-*-*.json")
+        print(f"Autodetected {len(files)} file")
+
+    events = sorted([Events(filename=fn) for fn in files])
+    if align:
+        print("Aligning events")
+        events = alignEvents(events)
+
+    eventNames = set([
+        ev["en"]
+        for event in events
+        for ev in event.events
+    ])
+
+    eventDict = dict(enumerate(eventNames))
+    compressDict = { name: id for id, name in eventDict.items()}
+
+    participants = set([ev.name for ev in events])
+
+    merged = {
+        "eventDict": eventDict,
+        "events": {
+            pname : {
+                e.rank : e.compressWith(compressDict)
+                for e in events
+                if e.name == pname
+            }
+            for pname in participants
+        }
+    }
+
+    print(f"Writing to {outfile}")
+    with open(outfile, 'w', newline='') as file:
+        json.dump(merged, file, separators=(",",":"))
+
+    return 0
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="", epilog="")
     subparsers = parser.add_subparsers(title='commands',
@@ -476,6 +531,15 @@ if __name__ == '__main__':
     plot.add_argument("files", nargs="+",
                       help="The event files to process")
 
+    merge_help = "Transform multiple events to the Trace Event Format."
+    merge = subparsers.add_parser('merge',
+                                   help=merge_help.splitlines()[0], description=merge_help)
+    merge.add_argument("files", nargs="*", 
+                        help="The event files to process, or nothing to autodetect")
+    merge.add_argument("-o", "--output", type=str, default="events.json",
+                        help="The resulting event file.")
+    merge.add_argument("-a", "--align", type=bool, default=True, help="Align participants?")
+
     args = parser.parse_args()
 
     dispatcher = {
@@ -484,6 +548,7 @@ if __name__ == '__main__':
         "analyze": lambda ns: analyzeCommand(ns.files, ns.output,  ns.unit),
         "summary": lambda ns: summaryCommand(ns.file, ns.output,  ns.unit),
         "plot": lambda ns: plotCommand(ns.events.split(","), ns.files,  ns.unit),
+        "merge": lambda ns: mergeCommand(ns.files, ns.output, ns.align)
     }
 
     def showHelp(ns):
