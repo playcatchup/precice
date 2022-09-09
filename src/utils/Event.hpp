@@ -14,10 +14,9 @@ namespace utils {
  */
 class Event {
 public:
-  enum class State : int {
-    STOPPED = 0,
-    RUNNING = 1,
-    PAUSED  = 2,
+  enum class State : bool {
+    STOPPED = false,
+    RUNNING = true
   };
 
   /// Default clock type. All other chrono types are derived from it.
@@ -41,12 +40,6 @@ public:
 
   /// Starts or restarts a stoped event.
   void start();
-
-  /// Pauses a running event.
-  void pause();
-
-  /// Resumes a paused event.
-  void resume();
 
   /// Stops a running event.
   void stop();

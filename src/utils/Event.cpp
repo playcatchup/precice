@@ -16,9 +16,6 @@ Event::Event(std::string eventName, bool autostart)
 
 Event::~Event()
 {
-  if (_state == State::PAUSED) {
-    resume();
-  }
   if (_state == State::RUNNING) {
     stop();
   }
@@ -31,24 +28,6 @@ void Event::start()
   _state = State::RUNNING;
 
   EventRegistry::instance().put(EventType::Start, _name, timestamp);
-}
-
-void Event::pause()
-{
-  auto timestamp = Clock::now();
-  PRECICE_ASSERT(_state == State::RUNNING, _name);
-  _state = State::PAUSED;
-
-  EventRegistry::instance().put(EventType::Pause, _name, timestamp);
-}
-
-void Event::resume()
-{
-  auto timestamp = Clock::now();
-  PRECICE_ASSERT(_state == State::PAUSED, _name);
-  _state = State::RUNNING;
-
-  EventRegistry::instance().put(EventType::Resume, _name, timestamp);
 }
 
 void Event::stop()

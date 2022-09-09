@@ -261,7 +261,7 @@ void SolverInterfaceImpl::configure(
   }
 
   utils::IntraComm::synchronize();
-  _solverInitEvent = std::make_unique<utils::Event>("solver.initialize");
+  _solverInitEvent = std::make_unique<utils::Event>("solver.initialize.preinit");
 }
 
 double SolverInterfaceImpl::initialize()
@@ -354,7 +354,7 @@ double SolverInterfaceImpl::initialize()
   e.stop();
   sep.pop();
   utils::IntraComm::synchronize();
-  _solverInitEvent->start();
+  _solverInitEvent = std::make_unique<utils::Event>("solver.initialize.postinit");
   return retdt;
 }
 
@@ -370,7 +370,7 @@ void SolverInterfaceImpl::initializeData()
                 "Did you forget to call markActionFulfilled(precice::constants::actionWriteInitialData()) after writing initial data?");
 
   utils::IntraComm::synchronize();
-  _solverInitEvent->pause();
+  _solverInitEvent->stop();
 
   utils::IntraComm::synchronize();
   Event                    e("initializeData");
@@ -396,7 +396,7 @@ void SolverInterfaceImpl::initializeData()
   e.stop();
   sep.pop();
   utils::IntraComm::synchronize();
-  _solverInitEvent->resume();
+  _solverInitEvent = std::make_unique<utils::Event>("solver.initialize.postinitData");
 
   _hasInitializedData = true;
 }
@@ -409,7 +409,10 @@ double SolverInterfaceImpl::advance(
 
   // Events for the solver time, stopped when we enter, restarted when we leave advance
   utils::IntraComm::synchronize();
-  _solverInitEvent.reset();
+  if (_solverInitEvent) {
+    _solverInitEvent->stop();
+    _solverInitEvent.reset();
+  }
   if (_solverAdvanceEvent) {
     _solverAdvanceEvent->stop();
   }

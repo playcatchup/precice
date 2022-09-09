@@ -15,11 +15,9 @@ namespace utils {
 
 /// Types of events
 enum struct EventType : char {
-  Start  = 'b',
-  Pause  = 'p',
-  Resume = 'r',
-  Stop   = 'e',
-  Data   = 'd'
+  Start = 'b',
+  Stop  = 'e',
+  Data  = 'd'
 };
 
 /// An event that has been recorded and it waiting to be written to file
