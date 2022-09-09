@@ -30,7 +30,7 @@ void Event::start()
   PRECICE_ASSERT(_state == State::STOPPED, _name);
   _state = State::RUNNING;
 
-  EventRegistry::instance().put('b', _name, timestamp);
+  EventRegistry::instance().put(EventType::Start, _name, timestamp);
 }
 
 void Event::pause()
@@ -39,7 +39,7 @@ void Event::pause()
   PRECICE_ASSERT(_state == State::RUNNING, _name);
   _state = State::PAUSED;
 
-  EventRegistry::instance().put('p', _name, timestamp);
+  EventRegistry::instance().put(EventType::Pause, _name, timestamp);
 }
 
 void Event::resume()
@@ -48,7 +48,7 @@ void Event::resume()
   PRECICE_ASSERT(_state == State::PAUSED, _name);
   _state = State::RUNNING;
 
-  EventRegistry::instance().put('r', _name, timestamp);
+  EventRegistry::instance().put(EventType::Resume, _name, timestamp);
 }
 
 void Event::stop()
@@ -57,7 +57,7 @@ void Event::stop()
   PRECICE_ASSERT(_state == State::RUNNING, _name);
   _state = State::STOPPED;
 
-  EventRegistry::instance().put('e', _name, timestamp);
+  EventRegistry::instance().put(EventType::Stop, _name, timestamp);
 }
 
 void Event::addData(const std::string &key, int value)
@@ -65,7 +65,7 @@ void Event::addData(const std::string &key, int value)
   auto timestamp = Clock::now();
   PRECICE_ASSERT(_state == State::RUNNING, _name);
 
-  EventRegistry::instance().put('d', _name, timestamp, key, value);
+  EventRegistry::instance().put(EventType::Data, _name, timestamp, key, value);
 }
 
 // -----------------------------------------------------------------------

@@ -4,20 +4,30 @@
 #include <cstddef>
 #include <iosfwd>
 #include <map>
-#include <stddef.h>
 #include <string>
 #include <utility>
 #include <vector>
+
 #include "Event.hpp"
 
 namespace precice {
 namespace utils {
 
+/// Types of events
+enum struct EventType : char {
+  Start  = 'b',
+  Pause  = 'p',
+  Resume = 'r',
+  Stop   = 'e',
+  Data   = 'd'
+};
+
+/// An event that has been recorded and it waiting to be written to file
 struct PendingEvent {
-  PendingEvent(char t, const std::string &n, Event::Clock::time_point c)
-      : type(t), ename(n), clock(c) {}
-  PendingEvent(char t, const std::string &en, Event::Clock::time_point c, const std::string &dn, int dv)
-      : type(t), ename(en), clock(c), dname(dn), dvalue(dv) {}
+  PendingEvent(EventType t, const std::string &n, Event::Clock::time_point c)
+      : type(static_cast<char>(t)), ename(n), clock(c) {}
+  PendingEvent(EventType t, const std::string &en, Event::Clock::time_point c, const std::string &dn, int dv)
+      : type(static_cast<char>(t)), ename(en), clock(c), dname(dn), dvalue(dv) {}
 
   char                     type;
   std::string              ename;

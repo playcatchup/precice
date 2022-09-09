@@ -108,7 +108,7 @@ void EventRegistry::stopBackend()
 {
   // create end of global event
   auto now = Event::Clock::now();
-  put('e', "_GLOBAL", now);
+  put(EventType::Stop, "_GLOBAL", now);
   // flush the queue
   flush();
   _output << "]}";
