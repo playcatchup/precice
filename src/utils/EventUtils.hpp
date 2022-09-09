@@ -36,19 +36,22 @@ struct PendingEvent {
   int                      dvalue;
 };
 
-/// High level object that stores data of all events.
-/** Call EventRegistry::initialize at the beginning of your application and
-EventRegistry::finalize at the end. Event timings will be usable without calling this
-function at all, but global timings as well as percentages do not work this way.  */
+/** High level object that stores data of all events.
+ *
+ * Call EventRegistry::initialize at the beginning of your application and
+ * EventRegistry::finalize at the end.
+ *
+ * Use \ref setWriteQueueMax() to adjust buffering behaviour.
+ */
 class EventRegistry {
 public:
-  /// Deleted copy operator for singleton pattern
-  EventRegistry(EventRegistry const &) = delete;
-
   ~EventRegistry();
 
-  /// Deleted assignment operator for singleton pattern
-  void operator=(EventRegistry const &) = delete;
+  /// Deleted copy and move SMFs for singleton pattern
+  EventRegistry(EventRegistry const &) = delete;
+  EventRegistry(EventRegistry &&)      = delete;
+  EventRegistry &operator=(EventRegistry const &) = delete;
+  EventRegistry &operator=(EventRegistry &&) = delete;
 
   /// Returns the only instance (singleton) of the EventRegistry class
   static EventRegistry &instance();
@@ -65,35 +68,39 @@ public:
   /// Sets the maximum size of the writequeue before calling flush(). Use 0 to flush on destruction.
   void setWriteQueueMax(std::size_t size);
 
-  /// Sets the global end time
+  /// Sets the global end time and flushes buffers
   void finalize();
 
-  /// Clears the registry. needed for tests
+  /// Clears the registry.
   void clear();
 
   /// Records an event
   void put(PendingEvent pe);
 
+  /// Records an event, takes ctor arguments
   template <typename... Args>
   void put(Args &&... args)
   {
     put(PendingEvent{std::forward<Args>(args)...});
   }
 
+  /// Writes all recorded events to file and flushes the buffer.
   void flush();
 
   /// Currently active prefix. Changing that applies only to newly created events.
   std::string prefix;
 
 private:
-  /// A name that is added to the logfile to distinguish different participants
+  /// The name of the current participant
   std::string _applicationName;
 
   /// The optional file prefix, may be empty
   std::string _prefix;
 
+  /// The rank/number of parallel instance of the current program
   int _rank;
 
+  /// The amount of parallel instances of the current program
   int _size;
 
   /// Private, empty constructor for singleton pattern
@@ -108,10 +115,16 @@ private:
 
   bool _finalized = false;
 
-  Event::Clock::time_point              _initClock;
+  /// The initial time clock, used to take runtime measurements.
+  Event::Clock::time_point _initClock;
+
+  /// The initial time, used to describe when the run started.
   std::chrono::system_clock::time_point _initTime;
 
+  /// Create the file and starts the filestream
   void startBackend();
+
+  /// Stops the global event, flushes the buffers and closes the filestream
   void stopBackend();
 };
 

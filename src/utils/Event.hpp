@@ -10,10 +10,12 @@
 namespace precice {
 namespace utils {
 
-/// Represents an event that can be started and stopped.
-/** Additionally to the duration there is a special property that can be set for a event.
-A property is a a key-value pair with a numerical value that can be used to trace certain events,
-like MPI calls in an event. It is intended to be set by the user. */
+/** Represents an event that can be started and stopped.
+ *
+ * Also allows to attach data in a key-value format using @ref addData()
+ *
+ * The event keeps minimal state. Events are passed to the @ref EventRegistry.
+ */
 class Event {
 public:
   enum class State : int {
