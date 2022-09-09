@@ -5,8 +5,8 @@
 namespace precice {
 namespace utils {
 
-Event::Event(const std::string &eventName, bool autostart)
-    : _name(eventName)
+Event::Event(std::string eventName, bool autostart)
+    : _name(std::move(eventName))
 {
   _name = EventRegistry::instance().prefix + _name;
   if (autostart) {

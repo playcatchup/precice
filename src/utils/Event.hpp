@@ -32,7 +32,7 @@ public:
   std::string name;
 
   /// Creates a new event and starts it, unless autostart = false
-  Event(const std::string &eventName, bool autostart = true);
+  Event(std::string eventName, bool autostart = true);
 
   /// Stops the event if it's running and report its times to the EventRegistry
   ~Event();
