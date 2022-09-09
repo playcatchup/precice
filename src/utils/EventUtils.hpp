@@ -2,13 +2,13 @@
 
 #include <chrono>
 #include <cstddef>
+#include <fstream>
 #include <iosfwd>
-#include <map>
 #include <string>
 #include <utility>
 #include <vector>
 
-#include "Event.hpp"
+#include "utils/Event.hpp"
 
 namespace precice {
 namespace utils {
