@@ -25,14 +25,18 @@ public:
   /// Default clock type. All other chrono types are derived from it.
   using Clock = std::chrono::steady_clock;
 
-  /// An Event can't be copied.
-  Event(const Event &other) = delete;
-
   /// Name used to identify the timer. Events of the same name are accumulated to
   std::string name;
 
   /// Creates a new event and starts it, unless autostart = false
   Event(std::string eventName, bool autostart = true);
+
+  Event(Event &&) = default;
+  Event &operator=(Event &&) = default;
+
+  // Copies would lead to duplicate entries
+  Event(const Event &other) = delete;
+  Event &operator=(const Event &) = delete;
 
   /// Stops the event if it's running and report its times to the EventRegistry
   ~Event();
