@@ -458,6 +458,8 @@ def analyzeCommand(eventfile, participant, outfile=None, unit='us'):
         secondaries.columns = secondaries.columns.droplevel()
 
         joined = pandas.concat([all, primary, secondaries], axis=1)
+    else:
+        joined = all
 
     joined.index.rename("event", inplace=True)
     printWide(joined)
