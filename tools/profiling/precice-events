@@ -5,6 +5,7 @@ import csv
 import sys
 import datetime
 import argparse
+import os
 
 
 def requireModules(modules):
@@ -65,33 +66,71 @@ def alignEvents(events):
     All ranks of a participant align at initialization, ensured by a barrier in preCICE.
     Primary ranks of all participants align after successfully establishing primary connections.
     """
-    participants = set([e.name for e in events])
-    grouped = {
-        p: [e for e in events if e.name == p]
-        for p in participants
-    }
+    assert "events" in events and "eventDict" in events, "Not a loaded event file"
+    assert len(events.get("events")) > 0, "No participants in the file"
+    participants = events["events"].keys()
+    grouped = events["events"]
 
     # Align ranks of each participant
-    for participant, group in grouped.items():
-        if len(group) == 1:
+    for participant, ranks in grouped.items():
+        if len(ranks) == 1:
             continue
-        print(f"Aligning {len(group)} ranks of {participant}")
-        syncs = {e.rank: e.intraSyncPoint() for e in group}
+        print(f"Aligning {len(ranks)} ranks of {participant}")
+        intraSyncID = events["eventDict"]["com.initializeIntraCom"]
+        syncs = {rank: e["ts"]+e["dur"]
+                 for rank, data in ranks.items()
+                 for e in data["events"]
+                 if e["en"] == intraSyncID
+                 }
+
         firstSync = min(syncs.values())
         shifts = {rank: firstSync-tp for rank, tp in syncs.items()}
+        print(shifts)
 
-        for e in group:
-            e.shiftBy(shifts[e.rank])
+        for rank, data in ranks.items():
+            for e in data["events"]:
+                e["ts"] += shifts[rank]
 
     if len(grouped) == 1:
         return events
 
     # Align participants
-    primaries = set(e.name for e in events if e.rank == 0)
-    for lonely in participants.difference(primaries):
+    primaries = [name for name, ranks in events["events"].items()
+                 if 0 in ranks]
+
+    for lonely in set(events["events"].keys()).difference(primaries):
         print(f"Cannot align {lonely} as event file of rank 0 is missing.")
 
-    syncs = {e.name: e.interSyncPoints() for e in events if e.rank == 0}
+    # Cannot align anything
+    if len(primaries) == 1:
+        return events
+
+    # Find synchronization points
+    syncEvents = ["m2n.acceptPrimaryRankConnection.",
+                  "m2n.requestPrimaryRankConnection."]
+    # Event ID -> Remote name
+    syncIDs = {id: name.rsplit(".", 1)[1]
+               for name, id in events["eventDict"].items()
+               if any([check in name for check in syncEvents])
+               }
+    print(f"syncids {syncIDs}")
+    syncs = {
+        local: {
+            remote: e["ts"] + e["dur"]
+            for e in events["events"][local][0]["events"]
+            for eid, remote in syncIDs.items()
+            if eid == e["en"]
+        }
+        for local in primaries
+    }
+
+    for local in primaries:
+        for e in events["events"][local][0]["events"]:
+            for eid, remote in syncIDs.items():
+                if eid == e["en"]:
+                    print(f"{local} <-> {remote} {e} {e['ts'] + e['dur']}")
+
+    print(f"syncs {syncs}")
     def hasSync(l, r): return syncs.get(l) and syncs.get(
         l).get(r) and syncs.get(r) and syncs.get(r).get(l)
     shifts = {
@@ -103,15 +142,18 @@ def alignEvents(events):
         if local < remote
         if hasSync(local, remote)
     }
+    print(f"shifts {shifts}")
     for (local, remote), shift in shifts.items():
         print(f"Aligning {remote} ({shift}us) with {local}")
-        for e in grouped[remote]:
-            e.shiftBy(shift)
+        for rank, data in events["events"][remote].items():
+            data["meta"]["unix_us"] += shift
+            for e in data["events"]:
+                e["ts"] += shift
 
     return events
 
 
-def groupEvents(events, initTime):
+def groupEvents(events, initTime, eventIDs):
     completed = []
     active = {}  # name to event data
 
@@ -159,209 +201,198 @@ def groupEvents(events, initTime):
             begin.pop("et")
             completed.append(begin)
 
-    return sorted(completed, key=lambda e: e["ts"])
+    return [
+        e | {"en": eventIDs.get(e["en"])}
+        for e in sorted(completed, key=lambda e: e["ts"])
+    ]
 
 
-class Events:
-    def __init__(self, content=None, filename=None):
-        """Read preCICE event data from a single rank.
-        Pass the filename or its content using the arguments.
-        All durations and timestamps are in microseconds.
+def loadEventFile(filename, eventIDs):
+    print(f"Loading events from {filename}")
+    content = open(filename, "r").read()
+    json = loadRobust(content)
 
-        Arguments:
-        content      -- the content of a preCICE events file
-        filename     -- the filename of a preCICE events file to read
-        """
-        if (filename):
-            print(f"Loading events from {filename}")
-            content = open(filename, "r").read()
-        if (content):
-            json = loadRobust(content)
+    unix_us = int(json["meta"]["unix_us"])
 
-        self.name = json["meta"]["name"]
-        self.rank = int(json["meta"]["rank"])
-        self.size = int(json["meta"]["size"])
-        self.unix_us = int(json["meta"]["unix_us"])
-        self.tinit = json["meta"]["tinit"]
+    # name -> id
+    newEvents = set([e["en"] for e in json["events"]]) - set(eventIDs.keys())
+    assert not newEvents.intersection(eventIDs.keys())
+    eventIDs |= {e: id for id, e in enumerate(newEvents, start=len(eventIDs))}
 
-        self.events = groupEvents(json["events"], self.unix_us)
+    instanceData = {
+        "meta": {
+            "name": json["meta"]["name"],
+            "rank": int(json["meta"]["rank"]),
+            "size": int(json["meta"]["size"]),
+            "unix_us": unix_us,
+            "tinit": json["meta"]["tinit"]
+        },
+        "events": groupEvents(json["events"], unix_us, eventIDs)
+    }
 
-    def __lt__(self, other):
-        """Allows to sort events by name, rank"""
-        return (self.name, self.rank) < (other.name, other.rank)
+    return (instanceData, eventIDs)
 
-    def filter(self, events):
-        """Keep only the provided events"""
-        self.events = [e for e in self.events if e["en"] in events]
-        return self
 
-    def toDataFrame(self, origin=False):
-        """Return the events as a pandas.DataFrame
-        Adds the participant and the rank if origin is True
-        """
+def loadEventFiles(filenames):
+    eventIDs = {}
+
+    contents = []
+    for fn in filenames:
+        idata, eventIDs = loadEventFile(fn, eventIDs)
+        contents.append(idata)
+
+    pnames = set([data["meta"]["name"] for data in contents])
+    return {
+        "eventDict": eventIDs,
+        "events": {
+            pname: {
+                data["meta"]["rank"]: data
+                for data in contents
+                if data["meta"]["name"] == pname
+            }
+            for pname in pnames
+        }
+    }
+
+
+class RankData:
+    def __init__(self, data):
+        meta = data["meta"]
+        self.name = meta["name"]
+        self.rank = meta["rank"]
+        self.size = meta["size"]
+        self.unix_us = meta["unix_us"]
+        self.tinit = meta["tinit"]
+
+        self.events = data["events"]
+
+    @property
+    def type(self):
+        return "Primary" if self.rank == 0 else "Secondary"
+
+    def toDataFrame(self, eventLookup):
         import pandas
         df = pandas.DataFrame(self.events)
         if "data" in df:
             df.drop("data", axis=1, inplace=True)
         df["dur"] = pandas.to_timedelta(df["dur"], unit='microseconds')
         df["ts"] = pandas.to_datetime(df["ts"], unit="us", origin="unix")
-
-        if origin:
-            df.insert(0, 'participant', self.name)
-            df.insert(1, 'rank', self.rank)
-
+        df.insert(0, 'participant', self.name)
+        df.insert(1, 'rank', self.rank)
+        df["en"] = df["en"].apply(lambda id: eventLookup[id])
         return df
 
-    def summary(self, outfile, unit):
-        import pandas
-        df = self.toDataFrame()
-        df["dur"] = df["dur"].apply(lambda dur: ns_to_unit(dur, unit))
-        df = df.groupby("en").aggregate(
-            {"dur": ["min", "max", "sum", "count", "mean", "var"]})
-        df.columns = df.columns.droplevel()
-        df.sort_values("sum", ascending=False, inplace=True)
-        printWide(df)
-        if outfile:
-            print(f"Summary written to {outfile}")
-            df.to_csv(outfile)
 
-    def toTrace(self, pid=0):
-        rankName = "Primary" if self.rank == 0 else "Secondary"
+class Run:
+    def __init__(self, filename):
+        print(f"Reading events file {filename}")
+        import json
+        with open(filename, 'r') as f:
+            content = json.load(f)
+
+        self.eventLookup = {id: name for name,
+                            id in content["eventDict"].items()}
+        self.data = content["events"]
+
+    def iterRanks(self):
+        for pranks in self.data.values():
+            for d in pranks.values():
+                yield RankData(d)
+
+    def iterParticipant(self, name):
+        for d in self.data[name].values():
+            yield RankData(d)
+
+    def participants(self):
+        return self.data.keys()
+
+    def lookupEvent(self, id):
+        return self.eventLookup[id]
+
+    def toTrace(self):
+        pids = {name: id for id, name in enumerate(self.participants())}
         metaEvents = [
-            {"name": "process_name", "ph": "M", "pid": pid,
-                "tid": self.rank, "args": {"name": self.name}},
+            {"name": "process_name", "ph": "M", "pid": pid, "args": {"name": name}}
+            for name, pid in pids.items()
+        ] + [
             {"name": "thread_name", "ph": "M", "pid": pid,
-                "tid": self.rank, "args": {"name": rankName}}
+                "tid": rank.rank, "args": {"name": rank.type}}
+            for name, pid in pids.items()
+            for rank in self.iterParticipant(name)
         ]
-        mainEvents = [
-            {
-                "name": e["en"],
-                "cat": "Solver" if e["en"].startswith("solver") else "preCICE",
-                "ph": "X",  # complete event
-                "pid": pid,
-                "tid": self.rank,
-                "ts": e["ts"],
-                "dur": e["dur"]
-            } | {} if "data" not in e else {"args": e["data"]}
-            for e in self.events
-        ]
+
+        mainEvents = []
+        for rank in self.iterRanks():
+            pid, tid = pids[rank.name], rank.rank
+            for e in rank.events:
+                en = self.lookupEvent(e["en"])
+                mainEvents.append({
+                    "name": en,
+                    "cat": "Solver" if en.startswith("solver") else "preCICE",
+                    "ph": "X",  # complete event
+                    "pid": pid,
+                    "tid": tid,
+                    "ts": e["ts"],
+                    "dur": e["dur"]
+                } | {} if "data" not in e else {"args": e["data"]})
+
         return {"traceEvents": metaEvents + mainEvents}
 
     def toExportList(self, unit=None):
         return [
             {
-                "participant": self.name,
-                "rank": self.rank,
-                "size": self.size,
-                "event": e["en"],
+                "participant": rank.name,
+                "rank": rank.rank,
+                "size": rank.size,
+                "event": self.lookupEvent(e["en"]),
                 "timestamp": e["ts"],
                 "duration": ns_to_unit(e["dur"]*1e3, unit) if unit else e["dur"],
                 "data": "" if "data" not in e else str(e["data"])
             }
-            for e in self.events
+            for rank in self.iterRanks()
+            for e in rank.events
         ]
 
-    def compressWith(self, compressDict):
-        return {
-            "meta": {
-                "name": self.name,
-                "rank": self.rank,
-                "size": self.size,
-                "unix_us": self.unix_us,
-                "tinit": self.tinit,
-            },
-            "events": [
-                e | {"en" : compressDict.get(e["en"]) }
-                for e in self.events
-            ]
-        }
-
-    def shiftBy(self, us):
-        self.unix_us += us
-        for e in self.events:
-            e["ts"] += us
-
-    def intraSyncPoint(self):
-        syncEvent = "com.initializeIntraCom"
-        for e in self.events:
-            if e["en"] == "com.initializeIntraCom":
-                return e["ts"]+e["dur"]
-        return None
+    def toDataFrame(self):
+        import pandas
+        return pandas.concat([
+            rank.toDataFrame(self.eventLookup)
+            for rank in self.iterRanks()
+        ])
 
 
-    def interSyncPoints(self):
-        syncEvents = ["m2n.acceptPrimaryRankConnection.",
-                      "m2n.requestPrimaryRankConnection."]
-        return {
-            e["en"].split(".")[-1]: e["ts"]+e["dur"]
-            for e in self.events
-            if any([en in e["en"] for en in syncEvents])
-        }
-
-
-def summaryCommand(filename, outfile, unit):
-    requireModules(["pandas"])
-    ev = Events(filename=filename)
-    ev.summary(outfile, unit)
-
-
-def traceCommand(filenames, outfile):
-
-    events = sorted([Events(filename=fn) for fn in filenames])
-    events = alignEvents(events)
-
-    pids = {name: pid for pid, name in enumerate(
-        set([e.name for e in events]))}
-    traces = None
-    for e in events:
-        pid = pids.get(e.name)
-        trace = e.toTrace(pid)
-        if traces:
-            traces["traceEvents"] += trace["traceEvents"]
-        else:
-            traces = trace
-
+def traceCommand(eventfile, outfile):
+    run = Run(eventfile)
+    traces = run.toTrace()
     json_object = json.dumps(traces, indent=2)
     print(f"Writing to {outfile}")
     with open(outfile, "w") as outfile:
         outfile.write(json_object)
+    return 0
 
 
-def exportCommand(filenames, outfile, unit):
-    events = sorted([Events(filename=fn) for fn in filenames])
-    events = alignEvents(events)
-    total = []
-    for e in events:
-        total += e.toExportList(unit)
-
+def exportCommand(eventfile, outfile, unit):
+    run = Run(eventfile)
+    total = run.toExportList(unit)
     fieldnames = total[0].keys()
     print(f"Writing to {outfile}")
     with open(outfile, 'w', newline='') as csvfile:
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(total)
+    return 0
 
 
-def plotCommand(events, filenames, unit):
+def plotCommand(events, eventfile, unit):
     requireModules(["pandas", "matplotlib"])
     import pandas
     import matplotlib.pyplot as plt
     import matplotlib
 
     def to_unit(o): return ns_to_unit(o, unit)
-    loadedEvents = sorted([Events(filename=fn).filter(events)
-                           for fn in filenames])
-    loadedEvents = alignEvents(loadedEvents)
 
-    # create dataframe containing all events
-    dfs = []
-    for event in loadedEvents:
-        if not event.events:
-            continue
-        df = event.toDataFrame(origin=True)
-        dfs.append(df)
-
-    total = pandas.concat(dfs, ignore_index=True)
+    run = Run(eventfile)
+    total = run.toDataFrame()
 
     allRanks = list(total[["participant", "rank"]
                           ].drop_duplicates().itertuples(index=False))
@@ -395,86 +426,76 @@ def plotCommand(events, filenames, unit):
     plt.tight_layout()
     plt.show()
 
+    return 0
 
-def analyzeCommand(filenames, outfile=None, unit='us'):
+
+def analyzeCommand(eventfile, participant, outfile=None, unit='us'):
     requireModules(["pandas"])
     import pandas
-    if len(filenames) <= 1:
-        print("the analyze command only makes sense for analyzing multiple files of a parallel participant")
-        print("consider using summary for serial participants")
-        return
 
-    events = sorted([Events(filename=fn) for fn in filenames])
-    names = set([e.name for e in events])
-    if len(names) > 1:
-        print(
-            f"Files must all represent the same participant, yet they represent {' and '.join(names)}.")
-        return
+    run = Run(eventfile)
+    df = run.toDataFrame()
 
-    df = pandas.concat([e.toDataFrame(origin=True) for e in events])
+    # Filter by participant
+    df = df[df["participant"] == participant]
     df.drop("participant", axis=1, inplace=True)
-    df.dur = df.dur.apply(lambda td: ns_to_unit(td, unit))
 
-    result = pandas.DataFrame()
+    # Convert duration to requested unit
+    df.dur = df.dur.apply(lambda td: ns_to_unit(td, unit))
 
     all = df.groupby("en").agg(
         {"dur": [("min", "min"), ("mean", "mean"), ("max", "max"), ("sum", "sum")]})
-    primary = df[df["rank"] == 0].groupby("en").agg(
-        {"dur": [("Pmin", "min"), ("Pmean", "mean"), ("Pmax", "max"), ("Psum", "sum")]})
-    secondaries = df[df["rank"] > 0].groupby("en").agg(
-        {"dur": [("Smin", "min"), ("Smean", "mean"), ("Smax", "max"), ("Ssum", "sum")]})
-
     all.columns = all.columns.droplevel()
-    primary.columns = primary.columns.droplevel()
-    secondaries.columns = secondaries.columns.droplevel()
 
-    joined = pandas.concat([all, primary, secondaries], axis=1)
+    isParallel = len(df["rank"].unique()) > 1
+    if isParallel:
+        primary = df[df["rank"] == 0].groupby("en").agg(
+            {"dur": [("Pmin", "min"), ("Pmean", "mean"), ("Pmax", "max"), ("Psum", "sum")]})
+        secondaries = df[df["rank"] > 0].groupby("en").agg(
+            {"dur": [("Smin", "min"), ("Smean", "mean"), ("Smax", "max"), ("Ssum", "sum")]})
+
+        primary.columns = primary.columns.droplevel()
+        secondaries.columns = secondaries.columns.droplevel()
+
+        joined = pandas.concat([all, primary, secondaries], axis=1)
+
     joined.index.rename("event", inplace=True)
     printWide(joined)
     if (outfile):
         print(f"Writing to {outfile}")
         joined.to_csv(outfile)
 
+    return 0
+
 
 def mergeCommand(files, outfile, align):
+    # Default to loading from the local directory
     if not files:
-        import glob
-        files = glob.glob("precice-*-*-*.json")
-        print(f"Autodetected {len(files)} file")
+        files = ["."]
 
-    events = sorted([Events(filename=fn) for fn in files])
+    resolved = []
+    for path in files:
+        if os.path.isfile(path):
+            resolved.append(path)
+        if os.path.isdir(path):
+            import glob
+            detected = glob.glob("precice-*-*-*.json", root_dir=path)
+            print(f"Autodetected {len(detected)} files in {path}")
+            resolved += [os.path.join(path, p) for p in detected]
+        else:
+            print(f"Not sure what do do with {path}")
+
+    merged = loadEventFiles(resolved)
+
     if align:
-        print("Aligning events")
-        events = alignEvents(events)
-
-    eventNames = set([
-        ev["en"]
-        for event in events
-        for ev in event.events
-    ])
-
-    eventDict = dict(enumerate(eventNames))
-    compressDict = { name: id for id, name in eventDict.items()}
-
-    participants = set([ev.name for ev in events])
-
-    merged = {
-        "eventDict": eventDict,
-        "events": {
-            pname : {
-                e.rank : e.compressWith(compressDict)
-                for e in events
-                if e.name == pname
-            }
-            for pname in participants
-        }
-    }
+        merged = alignEvents(merged)
 
     print(f"Writing to {outfile}")
     with open(outfile, 'w', newline='') as file:
-        json.dump(merged, file, separators=(",",":"))
+        json.dump(merged, file, separators=(",", ":"))
 
     return 0
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="", epilog="")
@@ -487,67 +508,60 @@ if __name__ == '__main__':
     parser.add_argument("-u", "--unit", choices=["h", "m", "s", "ms", "us"], default="us",
                         help="The duration unit to use")
 
-    summary_help = """Prints a summary of a single event file.
-    Events durations are displayed in the unit of choice.
-    """
-    summary = subparsers.add_parser('summary', help=summary_help.splitlines()[
-        0], description=summary_help)
-    summary.add_argument("file", help="The event file to process")
-    summary.add_argument("-o", "--output",
-                         help="Write the result to CSV file.")
-
-    analyze_help = """Analyze events of multiple event files of the same solver.
+    analyze_help = """Analyze events data of a given solver.
     Events durations are displayed in the unit of choice and grouped in three sections:
-    Aggregates over all ranks, only the Primary rank, and only the Secondary ranks.
+    For parallel solvers, aggregates over all ranks, only the Primary rank, and only the Secondary ranks.
     """
     analyze = subparsers.add_parser('analyze',
                                     help=analyze_help.splitlines()[0], description=analyze_help)
-    analyze.add_argument("files", nargs="+",
-                         help="The event files to process")
+    analyze.add_argument("participant", type=str,
+                         help="The participant to analyze")
+    analyze.add_argument("eventfile", nargs="?", type=str, default="events.json",
+                         help="The event file to process")
     analyze.add_argument("-o", "--output",
                          help="Write the result to CSV file")
 
-    trace_help = "Transform multiple events to the Trace Event Format."
+    trace_help = "Transform events to the Trace Event Format."
     trace = subparsers.add_parser('trace',
                                   help=trace_help.splitlines()[0], description=trace_help)
-    trace.add_argument("files", nargs="+",
-                       help="The event files to process")
+    trace.add_argument("eventfile", type=str, nargs="?", default="events.json",
+                       help="The event file to process")
     trace.add_argument("-o", "--output", default="trace.json",
                        help="The resulting trace file")
 
-    export_help = "Transform multiple events to the Trace Event Format."
+    export_help = "Exports the events as a CSV file."
     export = subparsers.add_parser('export',
                                    help=export_help.splitlines()[0], description=export_help)
-    export.add_argument("files", nargs="+",
+    export.add_argument("eventfile", nargs="?", type=str, default="events.json",
                         help="The event files to process")
     export.add_argument("-o", "--output", type=str, default="events.csv",
                         help="The CSV file to export to.")
 
-    plot_help = "Plot given events for given event files."
+    plot_help = "Plot given events of the recorded events."
     plot = subparsers.add_parser('plot',
                                  help=plot_help.splitlines()[0], description=plot_help)
     plot.add_argument("events", type=str,
                       help="The events to plot")
-    plot.add_argument("files", nargs="+",
-                      help="The event files to process")
+    plot.add_argument("eventfile", nargs="?", type=str, default="events.json",
+                      help="The event file to process")
 
     merge_help = "Transform multiple events to the Trace Event Format."
     merge = subparsers.add_parser('merge',
-                                   help=merge_help.splitlines()[0], description=merge_help)
-    merge.add_argument("files", nargs="*", 
-                        help="The event files to process, or nothing to autodetect")
+                                  help=merge_help.splitlines()[0], description=merge_help)
+    merge.add_argument("files", nargs="*",
+                       help="The event files to process, or nothing to autodetect")
     merge.add_argument("-o", "--output", type=str, default="events.json",
-                        help="The resulting event file.")
-    merge.add_argument("-a", "--align", type=bool, default=True, help="Align participants?")
+                       help="The resulting event file.")
+    merge.add_argument("-a", "--align", type=bool,
+                       default=True, help="Align participants?")
 
     args = parser.parse_args()
 
     dispatcher = {
-        "trace": lambda ns: traceCommand(ns.files, ns.output),
-        "export": lambda ns: exportCommand(ns.files, ns.output, ns.unit),
-        "analyze": lambda ns: analyzeCommand(ns.files, ns.output,  ns.unit),
-        "summary": lambda ns: summaryCommand(ns.file, ns.output,  ns.unit),
-        "plot": lambda ns: plotCommand(ns.events.split(","), ns.files,  ns.unit),
+        "trace": lambda ns: traceCommand(ns.eventfile, ns.output),
+        "export": lambda ns: exportCommand(ns.eventfile, ns.output, ns.unit),
+        "analyze": lambda ns: analyzeCommand(ns.eventfile, ns.participant, ns.output,  ns.unit),
+        "plot": lambda ns: plotCommand(ns.events.split(","), ns.eventfile,  ns.unit),
         "merge": lambda ns: mergeCommand(ns.files, ns.output, ns.align)
     }
 
