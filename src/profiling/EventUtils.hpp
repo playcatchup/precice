@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "profiling/Event.hpp"
+#include "utils/assertion.hpp"
 
 namespace precice::profiling {
 

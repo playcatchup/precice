@@ -5,19 +5,13 @@
 
 namespace precice::profiling {
 
-Event::Event(std::string eventName, bool autostart)
-    : _name(std::move(eventName))
+Event::Event(std::string eventName, bool fundamental, bool autostart)
+    : _name(std::move(eventName)), _fundamental(fundamental)
 {
   _name = EventRegistry::instance().prefix + _name;
   if (autostart) {
     start();
   }
-}
-
-Event::Event(std::string eventName, FundamentalTag, bool autostart)
-    : Event(std::move(eventName), autostart)
-{
-  _fundamental = true;
 }
 
 Event::~Event()

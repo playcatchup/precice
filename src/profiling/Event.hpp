@@ -32,8 +32,10 @@ public:
   std::string name;
 
   /// Creates a new event and starts it, unless autostart = false
-  Event(std::string eventName, bool autostart = true);
-  Event(std::string eventName, FundamentalTag, bool autostart = true);
+  Event(std::string eventName, bool autostart = true)
+      : Event(std::move(eventName), false, autostart) {}
+  Event(std::string eventName, FundamentalTag, bool autostart = true)
+      : Event(std::move(eventName), true, autostart) {}
 
   Event(Event &&) = default;
   Event &operator=(Event &&) = default;
@@ -55,6 +57,8 @@ public:
   void addData(const std::string &key, int value);
 
 private:
+  Event(std::string eventName, bool fundamental, bool autostart);
+
   std::string _name;
   State       _state = State::STOPPED;
   bool        _fundamental{false};
