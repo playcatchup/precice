@@ -45,7 +45,7 @@ void M2N::acceptPrimaryRankConnection(
   PRECICE_TRACE(acceptorName, requesterName);
 
   utils::IntraComm::synchronize();
-  Event e("m2n.acceptPrimaryRankConnection." + requesterName);
+  Event e("m2n.acceptPrimaryRankConnection." + requesterName, profiling::Fundamental);
 
   if (not utils::IntraComm::isSecondary()) {
     PRECICE_DEBUG("Accept primary connection");
@@ -64,7 +64,7 @@ void M2N::requestPrimaryRankConnection(
   PRECICE_TRACE(acceptorName, requesterName);
 
   utils::IntraComm::synchronize();
-  Event e("m2n.requestPrimaryRankConnection." + acceptorName);
+  Event e("m2n.requestPrimaryRankConnection." + acceptorName, profiling::Fundamental);
 
   if (not utils::IntraComm::isSecondary()) {
     PRECICE_ASSERT(_intraComm);

@@ -2095,7 +2095,7 @@ void SolverInterfaceImpl::initializeIntraCommunication()
 {
   PRECICE_TRACE();
 
-  Event e("com.initializeIntraCom");
+  Event e("com.initializeIntraCom", profiling::Fundamental);
   utils::IntraComm::getCommunication()->connectIntraComm(
       _accessorName, "IntraComm",
       _accessorProcessRank, _accessorCommunicatorSize);
