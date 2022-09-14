@@ -10,6 +10,7 @@ namespace config {
 
 Configuration::Configuration()
     : _tag(*this, "precice-configuration", xml::XMLTag::OCCUR_ONCE),
+      _profilingConfig(_tag),
       _logConfig(_tag),
       _solverInterfaceConfig(_tag)
 {

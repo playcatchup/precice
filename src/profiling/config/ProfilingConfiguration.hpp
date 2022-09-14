@@ -9,14 +9,15 @@ namespace precice::profiling {
 /**
  * @brief Configuration class for exports.
  */
-class ProfilingConfiguration : public xml::XMLTag::Listener {
+class ProfilingConfiguration final : public xml::XMLTag::Listener {
 public:
   ProfilingConfiguration(xml::XMLTag &parent);
 
-  virtual void xmlTagCallback(const xml::ConfigurationContext &context, xml::XMLTag &callingTag);
+  ~ProfilingConfiguration() override = default;
 
-  /// Callback from automatic configuration. Not utilitzed here.
-  virtual void xmlEndTagCallback(const xml::ConfigurationContext &context, xml::XMLTag &callingTag) {}
+  void xmlTagCallback(const xml::ConfigurationContext &context, xml::XMLTag &callingTag) override;
+
+  void xmlEndTagCallback(const xml::ConfigurationContext &context, xml::XMLTag &callingTag) override{};
 
 private:
   logging::Logger _log{"profiling::ProfilingConfiguration"};

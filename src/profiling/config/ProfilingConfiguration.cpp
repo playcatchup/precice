@@ -28,6 +28,8 @@ ProfilingConfiguration::ProfilingConfiguration(xml::XMLTag &parent)
                                          "1 will write event directly to file. "
                                          "Everything larger than 1 will write events in blocks (recommended)");
   tag.addAttribute(attrFlush);
+
+  parent.addSubtag(tag);
 }
 
 void ProfilingConfiguration::xmlTagCallback(
