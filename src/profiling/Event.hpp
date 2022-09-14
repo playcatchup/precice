@@ -5,6 +5,13 @@
 
 namespace precice::profiling {
 
+/// Tag to annotate fundamental events
+struct FundamentalTag {
+};
+
+/// Convenience instance of the @ref FundamentalTag
+static constexpr FundamentalTag Fundamental{};
+
 /** Represents an event that can be started and stopped.
  *
  * Also allows to attach data in a key-value format using @ref addData()
@@ -26,6 +33,7 @@ public:
 
   /// Creates a new event and starts it, unless autostart = false
   Event(std::string eventName, bool autostart = true);
+  Event(std::string eventName, FundamentalTag, bool autostart = true);
 
   Event(Event &&) = default;
   Event &operator=(Event &&) = default;
@@ -49,6 +57,7 @@ public:
 private:
   std::string _name;
   State       _state = State::STOPPED;
+  bool        _fundamental{false};
 };
 
 /// Class that changes the prefix in its scope

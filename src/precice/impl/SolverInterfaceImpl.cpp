@@ -212,7 +212,7 @@ void SolverInterfaceImpl::configure(
   PRECICE_TRACE();
 
   profiling::EventRegistry::instance().initialize(_accessorName, "precice", _accessorProcessRank, _accessorCommunicatorSize);
-  Event e("configure");
+  Event e("configure", profiling::Fundamental);
 
   _meshLock.clear();
 
@@ -260,7 +260,7 @@ void SolverInterfaceImpl::configure(
   }
 
   utils::IntraComm::synchronize();
-  _solverInitEvent = std::make_unique<profiling::Event>("solver.initialize.preinit");
+  _solverInitEvent = std::make_unique<profiling::Event>("solver.initialize.preinit", profiling::Fundamental);
 }
 
 double SolverInterfaceImpl::initialize()
@@ -271,7 +271,7 @@ double SolverInterfaceImpl::initialize()
   PRECICE_ASSERT(not _couplingScheme->isInitialized());
   utils::IntraComm::synchronize();
   _solverInitEvent->stop();
-  Event                        e("initialize");
+  Event                        e("initialize", profiling::Fundamental);
   profiling::ScopedEventPrefix sep("initialize/");
 
   // Setup communication
@@ -353,7 +353,7 @@ double SolverInterfaceImpl::initialize()
   e.stop();
   sep.pop();
   utils::IntraComm::synchronize();
-  _solverInitEvent = std::make_unique<profiling::Event>("solver.initialize.postinit");
+  _solverInitEvent = std::make_unique<profiling::Event>("solver.initialize.postinit", profiling::Fundamental);
   return retdt;
 }
 
@@ -372,7 +372,7 @@ void SolverInterfaceImpl::initializeData()
   _solverInitEvent->stop();
 
   utils::IntraComm::synchronize();
-  Event                        e("initializeData");
+  Event                        e("initializeData", profiling::Fundamental);
   profiling::ScopedEventPrefix sep("initializeData/");
 
   PRECICE_DEBUG("Initialize data");
@@ -395,7 +395,7 @@ void SolverInterfaceImpl::initializeData()
   e.stop();
   sep.pop();
   utils::IntraComm::synchronize();
-  _solverInitEvent = std::make_unique<profiling::Event>("solver.initialize.postinitData");
+  _solverInitEvent = std::make_unique<profiling::Event>("solver.initialize.postinitData", profiling::Fundamental);
 
   _hasInitializedData = true;
 }
@@ -416,7 +416,7 @@ double SolverInterfaceImpl::advance(
     _solverAdvanceEvent->stop();
   }
 
-  Event                        e("advance");
+  Event                        e("advance", profiling::Fundamental);
   profiling::ScopedEventPrefix sep("advance/");
 
   PRECICE_CHECK(_state != State::Constructed, "initialize() has to be called before advance().");
@@ -499,7 +499,7 @@ double SolverInterfaceImpl::advance(
   sep.pop();
   e.stop();
   if (!_solverAdvanceEvent) {
-    _solverAdvanceEvent = std::make_unique<profiling::Event>("solver.advance", false);
+    _solverAdvanceEvent = std::make_unique<profiling::Event>("solver.advance", profiling::Fundamental, false);
   }
   utils::IntraComm::synchronize();
   _solverAdvanceEvent->start();
@@ -517,7 +517,7 @@ void SolverInterfaceImpl::finalize()
     _solverAdvanceEvent.reset();
   }
 
-  Event                        e("finalize"); // no precice::syncMode here as MPI is already finalized at destruction of this event
+  Event                        e("finalize", profiling::Fundamental); // no precice::syncMode here as MPI is already finalized at destruction of this event
   profiling::ScopedEventPrefix sep("finalize/");
 
   if (_state == State::Initialized) {

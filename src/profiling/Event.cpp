@@ -1,4 +1,5 @@
 #include "profiling/Event.hpp"
+#include <sys/eventfd.h>
 #include "profiling/EventUtils.hpp"
 #include "utils/assertion.hpp"
 
@@ -11,6 +12,12 @@ Event::Event(std::string eventName, bool autostart)
   if (autostart) {
     start();
   }
+}
+
+Event::Event(std::string eventName, FundamentalTag, bool autostart)
+    : Event(std::move(eventName), autostart)
+{
+  _fundamental = true;
 }
 
 Event::~Event()
@@ -26,7 +33,9 @@ void Event::start()
   PRECICE_ASSERT(_state == State::STOPPED, _name);
   _state = State::RUNNING;
 
-  EventRegistry::instance().put(EventType::Start, _name, timestamp);
+  if (EventRegistry::instance().accepting(toEventClass(_fundamental))) {
+    EventRegistry::instance().put(EventType::Start, _name, timestamp);
+  }
 }
 
 void Event::stop()
@@ -35,7 +44,9 @@ void Event::stop()
   PRECICE_ASSERT(_state == State::RUNNING, _name);
   _state = State::STOPPED;
 
-  EventRegistry::instance().put(EventType::Stop, _name, timestamp);
+  if (EventRegistry::instance().accepting(toEventClass(_fundamental))) {
+    EventRegistry::instance().put(EventType::Stop, _name, timestamp);
+  }
 }
 
 void Event::addData(const std::string &key, int value)
@@ -43,7 +54,9 @@ void Event::addData(const std::string &key, int value)
   auto timestamp = Clock::now();
   PRECICE_ASSERT(_state == State::RUNNING, _name);
 
-  EventRegistry::instance().put(EventType::Data, _name, timestamp, key, value);
+  if (EventRegistry::instance().accepting(toEventClass(_fundamental))) {
+    EventRegistry::instance().put(EventType::Data, _name, timestamp, key, value);
+  }
 }
 
 // -----------------------------------------------------------------------

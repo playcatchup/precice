@@ -203,7 +203,9 @@ void TestContext::initializeIntraComm()
 void TestContext::initializeEvents()
 {
   if (!invalid && _events) {
-    precice::profiling::EventRegistry::instance().initialize(name, "testprecice", rank, size);
+    auto &er = precice::profiling::EventRegistry::instance();
+    er.setMode(precice::profiling::Mode::All);
+    er.initialize(name, "testprecice", rank, size);
   }
 }
 

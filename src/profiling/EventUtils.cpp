@@ -8,6 +8,7 @@
 #include <memory>
 #include <ratio>
 #include <string>
+#include <sys/types.h>
 #include <tuple>
 #include <utility>
 
@@ -58,7 +59,9 @@ void EventRegistry::initialize(std::string applicationName, std::string filePref
   this->_initTime        = initTime;
   this->_initClock       = initClock;
 
-  startBackend();
+  if (_mode != Mode::Off) {
+    startBackend();
+  }
 
   _initialized = true;
   _finalized   = false;
@@ -69,8 +72,14 @@ void EventRegistry::setWriteQueueMax(std::size_t size)
   _writeQueueMax = size;
 }
 
+void EventRegistry::setMode(Mode mode)
+{
+  _mode = mode;
+}
+
 void EventRegistry::startBackend()
 {
+  PRECICE_ASSERT(_mode != Mode::Off, "The profiling is off.")
   if (_prefix.empty()) {
     _output.open(fmt::format(
         "{}-{}-{}.json",
@@ -104,6 +113,7 @@ void EventRegistry::startBackend()
 
 void EventRegistry::stopBackend()
 {
+  PRECICE_ASSERT(_mode != Mode::Off, "The profiling is off.")
   // create end of global event
   auto now = Event::Clock::now();
   put(EventType::Stop, "_GLOBAL", now);
@@ -118,7 +128,9 @@ void EventRegistry::finalize()
   if (_finalized)
     return;
 
-  stopBackend();
+  if (_mode != Mode::Off) {
+    stopBackend();
+  }
 
   _initialized = false;
   _finalized   = true;
@@ -131,6 +143,7 @@ void EventRegistry::clear()
 
 void EventRegistry::put(PendingEvent pe)
 {
+  PRECICE_ASSERT(_mode != Mode::Off, "The profiling is off.")
   _writeQueue.push_back(std::move(pe));
   if (_writeQueueMax > 0 && _writeQueue.size() > _writeQueueMax) {
     flush();
@@ -139,6 +152,10 @@ void EventRegistry::put(PendingEvent pe)
 
 void EventRegistry::flush()
 {
+  if (_mode == Mode::Off) {
+    return;
+  }
+
   for (const auto &pe : _writeQueue) {
     auto msSinceInit = std::chrono::duration_cast<std::chrono::microseconds>(pe.clock - _initClock).count();
 

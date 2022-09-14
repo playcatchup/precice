@@ -12,12 +12,29 @@
 
 namespace precice::profiling {
 
+/// The Mode of the Event utility
+enum struct Mode {
+  All,
+  Fundamental,
+  Off
+};
+
 /// Types of events
 enum struct EventType : char {
   Start = 'b',
   Stop  = 'e',
   Data  = 'd'
 };
+
+enum struct EventClass : bool {
+  Normal      = false,
+  Fundamental = true
+};
+
+inline EventClass toEventClass(bool isFundamental)
+{
+  return static_cast<EventClass>(isFundamental);
+}
 
 /// An event that has been recorded and it waiting to be written to file
 struct PendingEvent {
@@ -65,6 +82,9 @@ public:
   /// Sets the maximum size of the writequeue before calling flush(). Use 0 to flush on destruction.
   void setWriteQueueMax(std::size_t size);
 
+  /// Sets the operational mode of the registry.
+  void setMode(Mode mode);
+
   /// Sets the global end time and flushes buffers
   void finalize();
 
@@ -84,6 +104,12 @@ public:
   /// Writes all recorded events to file and flushes the buffer.
   void flush();
 
+  /// Should an event of this class be forwarded to the registry?
+  inline bool accepting(EventClass ec) const
+  {
+    return _mode == Mode::All || (ec == EventClass::Fundamental && _mode == Mode::Fundamental);
+  }
+
   /// Currently active prefix. Changing that applies only to newly created events.
   std::string prefix;
 
@@ -93,6 +119,9 @@ private:
 
   /// The optional file prefix, may be empty
   std::string _prefix;
+
+  /// The operational mode of the registry
+  Mode _mode = Mode::Off;
 
   /// The rank/number of parallel instance of the current program
   int _rank;
