@@ -20,11 +20,11 @@
 #include "m2n/DistributedCommunication.hpp"
 #include "mesh/Mesh.hpp"
 #include "precice/types.hpp"
-#include "utils/Event.hpp"
+#include "profiling/Event.hpp"
 #include "utils/IntraComm.hpp"
 #include "utils/assertion.hpp"
 
-using precice::utils::Event;
+using precice::profiling::Event;
 
 namespace precice {
 namespace m2n {

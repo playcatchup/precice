@@ -14,8 +14,8 @@
 #include "mesh/Mesh.hpp"
 #include "mesh/SharedPointer.hpp"
 #include "mesh/Vertex.hpp"
+#include "profiling/Event.hpp"
 #include "query/Index.hpp"
-#include "utils/Event.hpp"
 #include "utils/IntraComm.hpp"
 #include "utils/Statistics.hpp"
 #include "utils/assertion.hpp"
@@ -39,7 +39,7 @@ void BarycentricBaseMapping::mapConservative(DataID inputDataID, DataID outputDa
 {
   PRECICE_TRACE(inputDataID, outputDataID);
   utils::IntraComm::synchronize();
-  precice::utils::Event e("map.bbm.mapData.From" + input()->getName() + "To" + output()->getName());
+  precice::profiling::Event e("map.bbm.mapData.From" + input()->getName() + "To" + output()->getName());
   PRECICE_ASSERT(getConstraint() == CONSERVATIVE, getConstraint());
   PRECICE_DEBUG("Map conservative");
   PRECICE_ASSERT(_interpolations.size() == input()->vertices().size(),
@@ -68,7 +68,7 @@ void BarycentricBaseMapping::mapConsistent(DataID inputDataID, DataID outputData
 {
   PRECICE_TRACE(inputDataID, outputDataID);
   utils::IntraComm::synchronize();
-  precice::utils::Event e("map.bbm.mapData.From" + input()->getName() + "To" + output()->getName());
+  precice::profiling::Event e("map.bbm.mapData.From" + input()->getName() + "To" + output()->getName());
   PRECICE_DEBUG("Map consistent");
   PRECICE_ASSERT(_interpolations.size() == output()->vertices().size(),
                  _interpolations.size(), output()->vertices().size());
@@ -97,7 +97,7 @@ void BarycentricBaseMapping::tagMeshFirstRound()
 {
   PRECICE_TRACE();
   utils::IntraComm::synchronize();
-  precice::utils::Event e("map.bbm.tagMeshFirstRound.From" + input()->getName() + "To" + output()->getName());
+  precice::profiling::Event e("map.bbm.tagMeshFirstRound.From" + input()->getName() + "To" + output()->getName());
   PRECICE_DEBUG("Compute Mapping for Tagging");
 
   computeMapping();

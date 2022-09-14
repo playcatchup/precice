@@ -1,4 +1,3 @@
-#include "EventUtils.hpp"
 #include <algorithm>
 #include <array>
 #include <cassert>
@@ -12,13 +11,12 @@
 #include <tuple>
 #include <utility>
 
-#include "TableWriter.hpp"
-#include "utils/Event.hpp"
+#include "profiling/Event.hpp"
+#include "profiling/EventUtils.hpp"
 #include "utils/assertion.hpp"
 #include "utils/fmt.hpp"
 
-namespace precice {
-namespace utils {
+namespace precice::profiling {
 
 using sys_clk  = std::chrono::system_clock;
 using stdy_clk = std::chrono::steady_clock;
@@ -158,5 +156,4 @@ void EventRegistry::flush()
   _writeQueue.clear();
 }
 
-} // namespace utils
-} // namespace precice
+} // namespace precice::profiling

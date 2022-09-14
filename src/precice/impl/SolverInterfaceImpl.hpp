@@ -21,7 +21,7 @@
 
 namespace precice {
 
-namespace utils {
+namespace profiling {
 class Event;
 }
 
@@ -589,8 +589,8 @@ private:
   friend struct Integration::Serial::Whitebox::TestConfigurationPeano;
   friend struct Integration::Serial::Whitebox::TestConfigurationComsol;
 
-  std::unique_ptr<utils::Event> _solverInitEvent;
-  std::unique_ptr<utils::Event> _solverAdvanceEvent;
+  std::unique_ptr<profiling::Event> _solverInitEvent;
+  std::unique_ptr<profiling::Event> _solverAdvanceEvent;
 };
 
 } // namespace impl

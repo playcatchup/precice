@@ -2,7 +2,7 @@
 
 #include <Eigen/QR>
 #include "precice/types.hpp"
-#include "utils/Event.hpp"
+#include "profiling/Event.hpp"
 
 namespace precice {
 namespace mapping {

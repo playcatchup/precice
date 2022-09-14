@@ -18,12 +18,12 @@
 #include "mesh/Mesh.hpp"
 #include "mesh/Vertex.hpp"
 #include "partition/Partition.hpp"
-#include "utils/Event.hpp"
+#include "profiling/Event.hpp"
 #include "utils/IntraComm.hpp"
 #include "utils/assertion.hpp"
 #include "utils/fmt.hpp"
 
-using precice::utils::Event;
+using precice::profiling::Event;
 
 namespace precice {
 namespace partition {

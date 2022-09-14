@@ -6,7 +6,7 @@
 #include "mapping/config/MappingConfiguration.hpp"
 #include "mesh/Mesh.hpp"
 #include "precice/types.hpp"
-#include "utils/Event.hpp"
+#include "profiling/Event.hpp"
 
 namespace precice {
 namespace mapping {

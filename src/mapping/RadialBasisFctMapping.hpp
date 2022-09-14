@@ -9,7 +9,7 @@
 #include "mapping/RadialBasisFctSolver.hpp"
 #include "mesh/Filter.hpp"
 #include "precice/types.hpp"
-#include "utils/Event.hpp"
+#include "profiling/Event.hpp"
 #include "utils/IntraComm.hpp"
 
 namespace precice {
@@ -84,7 +84,7 @@ void RadialBasisFctMapping<RADIAL_BASIS_FUNCTION_T>::computeMapping()
   PRECICE_TRACE();
 
   utils::IntraComm::synchronize();
-  precice::utils::Event e("map.rbf.computeMapping.From" + this->input()->getName() + "To" + this->output()->getName());
+  precice::profiling::Event e("map.rbf.computeMapping.From" + this->input()->getName() + "To" + this->output()->getName());
 
   PRECICE_ASSERT(this->input()->getDimensions() == this->output()->getDimensions(),
                  this->input()->getDimensions(), this->output()->getDimensions());
@@ -160,7 +160,7 @@ template <typename RADIAL_BASIS_FUNCTION_T>
 void RadialBasisFctMapping<RADIAL_BASIS_FUNCTION_T>::mapConservative(DataID inputDataID, DataID outputDataID)
 {
   utils::IntraComm::synchronize();
-  precice::utils::Event e("map.rbf.mapData.From" + this->input()->getName() + "To" + this->output()->getName());
+  precice::profiling::Event e("map.rbf.mapData.From" + this->input()->getName() + "To" + this->output()->getName());
   PRECICE_TRACE(inputDataID, outputDataID);
   using precice::com::AsVectorTag;
 
@@ -279,7 +279,7 @@ template <typename RADIAL_BASIS_FUNCTION_T>
 void RadialBasisFctMapping<RADIAL_BASIS_FUNCTION_T>::mapConsistent(DataID inputDataID, DataID outputDataID)
 {
   utils::IntraComm::synchronize();
-  precice::utils::Event e("map.rbf.mapData.From" + this->input()->getName() + "To" + this->output()->getName());
+  precice::profiling::Event e("map.rbf.mapData.From" + this->input()->getName() + "To" + this->output()->getName());
   PRECICE_TRACE(inputDataID, outputDataID);
   using precice::com::AsVectorTag;
 

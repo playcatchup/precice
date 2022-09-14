@@ -1,9 +1,8 @@
-#include "utils/Event.hpp"
-#include "utils/EventUtils.hpp"
+#include "profiling/Event.hpp"
+#include "profiling/EventUtils.hpp"
 #include "utils/assertion.hpp"
 
-namespace precice {
-namespace utils {
+namespace precice::profiling {
 
 Event::Event(std::string eventName, bool autostart)
     : _name(std::move(eventName))
@@ -65,5 +64,4 @@ void ScopedEventPrefix::pop()
   EventRegistry::instance().prefix = previousName;
 }
 
-} // namespace utils
-} // namespace precice
+} // namespace precice::profiling

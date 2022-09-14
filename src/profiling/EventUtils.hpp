@@ -8,10 +8,9 @@
 #include <utility>
 #include <vector>
 
-#include "utils/Event.hpp"
+#include "profiling/Event.hpp"
 
-namespace precice {
-namespace utils {
+namespace precice::profiling {
 
 /// Types of events
 enum struct EventType : char {
@@ -126,5 +125,4 @@ private:
   void stopBackend();
 };
 
-} // namespace utils
-} // namespace precice
+} // namespace precice::profiling

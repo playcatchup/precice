@@ -14,8 +14,8 @@
 #include "mesh/Mesh.hpp"
 #include "mesh/SharedPointer.hpp"
 #include "mesh/Vertex.hpp"
+#include "profiling/Event.hpp"
 #include "query/Index.hpp"
-#include "utils/Event.hpp"
 #include "utils/IntraComm.hpp"
 #include "utils/Statistics.hpp"
 #include "utils/assertion.hpp"
@@ -46,7 +46,7 @@ void NearestProjectionMapping::computeMapping()
   PRECICE_TRACE(input()->vertices().size(), output()->vertices().size());
   const std::string baseEvent = "map.np.computeMapping.From" + input()->getName() + "To" + output()->getName();
   utils::IntraComm::synchronize();
-  precice::utils::Event e(baseEvent);
+  precice::profiling::Event e(baseEvent);
 
   // Setup Direction of Mapping
   mesh::PtrMesh origins, searchSpace;

@@ -3,8 +3,7 @@
 #include <chrono>
 #include <string>
 
-namespace precice {
-namespace utils {
+namespace precice::profiling {
 
 /** Represents an event that can be started and stopped.
  *
@@ -65,5 +64,4 @@ private:
   std::string previousName = "";
 };
 
-} // namespace utils
-} // namespace precice
+} // namespace precice::profiling

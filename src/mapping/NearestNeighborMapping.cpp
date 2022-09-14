@@ -4,9 +4,9 @@
 #include <boost/container/flat_set.hpp>
 #include <functional>
 #include "logging/LogMacros.hpp"
+#include "profiling/Event.hpp"
+#include "profiling/EventUtils.hpp"
 #include "utils/EigenHelperFunctions.hpp"
-#include "utils/Event.hpp"
-#include "utils/EventUtils.hpp"
 #include "utils/IntraComm.hpp"
 #include "utils/assertion.hpp"
 
@@ -31,7 +31,7 @@ void NearestNeighborMapping::mapConservative(DataID inputDataID, DataID outputDa
 {
   PRECICE_TRACE(inputDataID, outputDataID);
   utils::IntraComm::synchronize();
-  precice::utils::Event e("map." + mappingNameShort + ".mapData.From" + input()->getName() + "To" + output()->getName());
+  precice::profiling::Event e("map." + mappingNameShort + ".mapData.From" + input()->getName() + "To" + output()->getName());
   PRECICE_DEBUG("Map conservative");
 
   const Eigen::VectorXd &inputValues  = input()->data(inputDataID)->values();
@@ -59,7 +59,7 @@ void NearestNeighborMapping::mapConsistent(DataID inputDataID, DataID outputData
 {
   PRECICE_TRACE(inputDataID, outputDataID);
   utils::IntraComm::synchronize();
-  precice::utils::Event e("map." + mappingNameShort + ".mapData.From" + input()->getName() + "To" + output()->getName());
+  precice::profiling::Event e("map." + mappingNameShort + ".mapData.From" + input()->getName() + "To" + output()->getName());
   PRECICE_DEBUG((hasConstraint(CONSISTENT) ? "Map consistent" : "Map scaled-consistent"));
 
   const Eigen::VectorXd &inputValues  = input()->data(inputDataID)->values();

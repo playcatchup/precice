@@ -7,11 +7,11 @@
 #include "logging/LogMacros.hpp"
 #include "mesh/Mesh.hpp"
 #include "precice/types.hpp"
-#include "utils/Event.hpp"
+#include "profiling/Event.hpp"
 #include "utils/IntraComm.hpp"
 #include "utils/assertion.hpp"
 
-using precice::utils::Event;
+using precice::profiling::Event;
 
 namespace precice {
 extern bool syncMode;

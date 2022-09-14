@@ -57,10 +57,10 @@
 #include "precice/impl/WriteDataContext.hpp"
 #include "precice/impl/versions.hpp"
 #include "precice/types.hpp"
+#include "profiling/Event.hpp"
+#include "profiling/EventUtils.hpp"
 #include "utils/EigenHelperFunctions.hpp"
 #include "utils/EigenIO.hpp"
-#include "utils/Event.hpp"
-#include "utils/EventUtils.hpp"
 #include "utils/Helpers.hpp"
 #include "utils/IntraComm.hpp"
 #include "utils/Parallel.hpp"
@@ -70,8 +70,7 @@
 #include "utils/assertion.hpp"
 #include "xml/XMLTag.hpp"
 
-using precice::utils::Event;
-using precice::utils::EventRegistry;
+using precice::profiling::Event;
 
 namespace precice {
 
@@ -212,7 +211,7 @@ void SolverInterfaceImpl::configure(
 {
   PRECICE_TRACE();
 
-  utils::EventRegistry::instance().initialize(_accessorName, "precice", _accessorProcessRank, _accessorCommunicatorSize);
+  profiling::EventRegistry::instance().initialize(_accessorName, "precice", _accessorProcessRank, _accessorCommunicatorSize);
   Event e("configure");
 
   _meshLock.clear();
@@ -253,7 +252,7 @@ void SolverInterfaceImpl::configure(
   e.stop();
 
   /// @todo make this block size configurable
-  utils::EventRegistry::instance().setWriteQueueMax(1000);
+  profiling::EventRegistry::instance().setWriteQueueMax(1000);
 
   PRECICE_DEBUG("Initialize intra-participant communication");
   if (utils::IntraComm::isParallel()) {
@@ -261,7 +260,7 @@ void SolverInterfaceImpl::configure(
   }
 
   utils::IntraComm::synchronize();
-  _solverInitEvent = std::make_unique<utils::Event>("solver.initialize.preinit");
+  _solverInitEvent = std::make_unique<profiling::Event>("solver.initialize.preinit");
 }
 
 double SolverInterfaceImpl::initialize()
@@ -272,8 +271,8 @@ double SolverInterfaceImpl::initialize()
   PRECICE_ASSERT(not _couplingScheme->isInitialized());
   utils::IntraComm::synchronize();
   _solverInitEvent->stop();
-  Event                    e("initialize");
-  utils::ScopedEventPrefix sep("initialize/");
+  Event                        e("initialize");
+  profiling::ScopedEventPrefix sep("initialize/");
 
   // Setup communication
 
@@ -354,7 +353,7 @@ double SolverInterfaceImpl::initialize()
   e.stop();
   sep.pop();
   utils::IntraComm::synchronize();
-  _solverInitEvent = std::make_unique<utils::Event>("solver.initialize.postinit");
+  _solverInitEvent = std::make_unique<profiling::Event>("solver.initialize.postinit");
   return retdt;
 }
 
@@ -373,8 +372,8 @@ void SolverInterfaceImpl::initializeData()
   _solverInitEvent->stop();
 
   utils::IntraComm::synchronize();
-  Event                    e("initializeData");
-  utils::ScopedEventPrefix sep("initializeData/");
+  Event                        e("initializeData");
+  profiling::ScopedEventPrefix sep("initializeData/");
 
   PRECICE_DEBUG("Initialize data");
   double dt = _couplingScheme->getNextTimestepMaxLength();
@@ -396,7 +395,7 @@ void SolverInterfaceImpl::initializeData()
   e.stop();
   sep.pop();
   utils::IntraComm::synchronize();
-  _solverInitEvent = std::make_unique<utils::Event>("solver.initialize.postinitData");
+  _solverInitEvent = std::make_unique<profiling::Event>("solver.initialize.postinitData");
 
   _hasInitializedData = true;
 }
@@ -417,8 +416,8 @@ double SolverInterfaceImpl::advance(
     _solverAdvanceEvent->stop();
   }
 
-  Event                    e("advance");
-  utils::ScopedEventPrefix sep("advance/");
+  Event                        e("advance");
+  profiling::ScopedEventPrefix sep("advance/");
 
   PRECICE_CHECK(_state != State::Constructed, "initialize() has to be called before advance().");
   PRECICE_CHECK(_state != State::Finalized, "advance() cannot be called after finalize().")
@@ -500,7 +499,7 @@ double SolverInterfaceImpl::advance(
   sep.pop();
   e.stop();
   if (!_solverAdvanceEvent) {
-    _solverAdvanceEvent = std::make_unique<utils::Event>("solver.advance", false);
+    _solverAdvanceEvent = std::make_unique<profiling::Event>("solver.advance", false);
   }
   utils::IntraComm::synchronize();
   _solverAdvanceEvent->start();
@@ -518,8 +517,8 @@ void SolverInterfaceImpl::finalize()
     _solverAdvanceEvent.reset();
   }
 
-  Event                    e("finalize"); // no precice::syncMode here as MPI is already finalized at destruction of this event
-  utils::ScopedEventPrefix sep("finalize/");
+  Event                        e("finalize"); // no precice::syncMode here as MPI is already finalized at destruction of this event
+  profiling::ScopedEventPrefix sep("finalize/");
 
   if (_state == State::Initialized) {
 
@@ -550,7 +549,7 @@ void SolverInterfaceImpl::finalize()
 
   // Finalize PETSc and Events first
   utils::Petsc::finalize();
-  utils::EventRegistry::instance().finalize();
+  profiling::EventRegistry::instance().finalize();
 
   // Finally clear events and finalize MPI
   utils::Parallel::finalizeManagedMPI();

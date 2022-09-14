@@ -265,6 +265,10 @@ target_sources(precice
     src/precice/impl/WriteDataContext.cpp
     src/precice/impl/WriteDataContext.hpp
     src/precice/types.hpp
+    src/profiling/Event.cpp
+    src/profiling/Event.hpp
+    src/profiling/EventUtils.cpp
+    src/profiling/EventUtils.hpp
     src/query/Index.cpp
     src/query/Index.hpp
     src/query/impl/RTreeAdapter.hpp
@@ -279,10 +283,6 @@ target_sources(precice
     src/utils/EigenHelperFunctions.cpp
     src/utils/EigenHelperFunctions.hpp
     src/utils/EigenIO.hpp
-    src/utils/Event.cpp
-    src/utils/Event.hpp
-    src/utils/EventUtils.cpp
-    src/utils/EventUtils.hpp
     src/utils/Helpers.cpp
     src/utils/Helpers.hpp
     src/utils/IntraComm.cpp

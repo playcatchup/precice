@@ -7,7 +7,7 @@
 #include "mapping/Mapping.hpp"
 #include "mesh/SharedPointer.hpp"
 #include "mesh/Vertex.hpp"
-#include "utils/Event.hpp"
+#include "profiling/Event.hpp"
 #include "utils/IntraComm.hpp"
 #include "utils/Parallel.hpp"
 #include "utils/Statistics.hpp"
@@ -37,7 +37,7 @@ void NearestNeighborBaseMapping::computeMapping()
 
   const std::string baseEvent = "map." + mappingNameShort + ".computeMapping.From" + input()->getName() + "To" + output()->getName();
   utils::IntraComm::synchronize();
-  precice::utils::Event e(baseEvent);
+  precice::profiling::Event e(baseEvent);
 
   // Setup Direction of Mapping
   mesh::PtrMesh origins, searchSpace;
@@ -110,7 +110,7 @@ void NearestNeighborBaseMapping::tagMeshFirstRound()
 {
   PRECICE_TRACE();
   utils::IntraComm::synchronize();
-  precice::utils::Event e("map." + mappingNameShort + ".tagMeshFirstRound.From" + input()->getName() + "To" + output()->getName());
+  precice::profiling::Event e("map." + mappingNameShort + ".tagMeshFirstRound.From" + input()->getName() + "To" + output()->getName());
 
   computeMapping();
 
