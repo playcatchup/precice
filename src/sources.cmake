@@ -269,6 +269,8 @@ target_sources(precice
     src/profiling/Event.hpp
     src/profiling/EventUtils.cpp
     src/profiling/EventUtils.hpp
+    src/profiling/config/ProfilingConfiguration.cpp
+    src/profiling/config/ProfilingConfiguration.hpp
     src/query/Index.cpp
     src/query/Index.hpp
     src/query/impl/RTreeAdapter.hpp
