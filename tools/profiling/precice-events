@@ -468,15 +468,15 @@ def analyzeCommand(eventfile, participant, outfile=None, unit='us'):
     df.dur = df.dur.apply(lambda td: ns_to_unit(td, unit))
 
     all = df.groupby("eid").agg(
-        {"dur": [("min", "min"), ("mean", "mean"), ("max", "max"), ("sum", "sum")]})
+        {"dur": [("min", "min"), ("mean", "mean"), ("max", "max"), ("sum", "sum"), ("count", "count")]})
     all.columns = all.columns.droplevel()
 
     isParallel = len(df["rank"].unique()) > 1
     if isParallel:
         primary = df[df["rank"] == 0].groupby("eid").agg(
-            {"dur": [("Pmin", "min"), ("Pmean", "mean"), ("Pmax", "max"), ("Psum", "sum")]})
+            {"dur": [("Pmin", "min"), ("Pmean", "mean"), ("Pmax", "max"), ("Psum", "sum"), ("Pcount", "count")]})
         secondaries = df[df["rank"] > 0].groupby("eid").agg(
-            {"dur": [("Smin", "min"), ("Smean", "mean"), ("Smax", "max"), ("Ssum", "sum")]})
+            {"dur": [("Smin", "min"), ("Smean", "mean"), ("Smax", "max"), ("Ssum", "sum"), ("Scount", "count")]})
 
         primary.columns = primary.columns.droplevel()
         secondaries.columns = secondaries.columns.droplevel()
