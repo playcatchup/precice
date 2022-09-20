@@ -76,7 +76,8 @@ def alignEvents(events):
         if len(ranks) == 1:
             continue
         print(f"Aligning {len(ranks)} ranks of {participant}")
-        intraSyncID = [id for name, id in events["eventDict"].items() if name == "com.initializeIntraCom"][0]
+        intraSyncID = [id for name, id in events["eventDict"].items(
+        ) if name == "com.initializeIntraCom"][0]
         syncs = {rank: e["ts"]+e["dur"]
                  for rank, data in ranks.items()
                  for e in data["events"]
@@ -313,7 +314,8 @@ class Run:
         with open(filename, 'r') as f:
             content = json.load(f)
 
-        self.eventLookup = {int(id): name for id, name in content["eventDict"].items()}
+        self.eventLookup = {int(id): name for id,
+                            name in content["eventDict"].items()}
         self.data = content["events"]
 
     def iterRanks(self):
