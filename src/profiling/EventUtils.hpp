@@ -6,6 +6,7 @@
 #include <iosfwd>
 #include <string>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include "profiling/Event.hpp"
@@ -20,13 +21,6 @@ enum struct Mode {
   Off
 };
 
-/// Types of events
-enum struct EventType : char {
-  Start = 'b',
-  Stop  = 'e',
-  Data  = 'd'
-};
-
 enum struct EventClass : bool {
   Normal      = false,
   Fundamental = true
@@ -38,18 +32,40 @@ inline EventClass toEventClass(bool isFundamental)
 }
 
 /// An event that has been recorded and it waiting to be written to file
-struct PendingEvent {
-  PendingEvent(EventType t, const std::string &n, Event::Clock::time_point c)
-      : type(static_cast<char>(t)), ename(n), clock(c) {}
-  PendingEvent(EventType t, const std::string &en, Event::Clock::time_point c, const std::string &dn, int dv)
-      : type(static_cast<char>(t)), ename(en), clock(c), dname(dn), dvalue(dv) {}
+struct TimedEntry {
+  TimedEntry(int eid, Event::Clock::time_point c)
+      : eid(eid), clock(c) {}
 
-  char                     type;
-  std::string              ename;
+  int                      eid;
   Event::Clock::time_point clock;
-  std::string              dname;
-  int                      dvalue;
 };
+
+struct StartEntry : TimedEntry {
+  using TimedEntry::TimedEntry;
+  static constexpr char type = 'b';
+};
+
+struct StopEntry : TimedEntry {
+  using TimedEntry::TimedEntry;
+  static constexpr char type = 'e';
+};
+
+struct DataEntry : TimedEntry {
+  DataEntry(int eid, Event::Clock::time_point c, int did, int dv)
+      : TimedEntry(eid, c), did(did), dvalue(dv) {}
+
+  static constexpr char type = 'd';
+  int                   did;
+  int                   dvalue;
+};
+
+struct NameEntry {
+  static constexpr char type = 'n';
+  std::string           name;
+  int                   id;
+};
+
+using PendingEntry = std::variant<StartEntry, StopEntry, DataEntry, NameEntry>;
 
 /** High level object that stores data of all events.
  *
@@ -93,14 +109,7 @@ public:
   void clear();
 
   /// Records an event
-  void put(PendingEvent pe);
-
-  /// Records an event, takes ctor arguments
-  template <typename... Args>
-  void put(Args &&... args)
-  {
-    put(PendingEvent{std::forward<Args>(args)...});
-  }
+  void put(PendingEntry pe);
 
   /// Writes all recorded events to file and flushes the buffer.
   void flush();
@@ -110,6 +119,8 @@ public:
   {
     return _mode == Mode::All || (ec == EventClass::Fundamental && _mode == Mode::Fundamental);
   }
+
+  int nameToID(const std::string &name);
 
   /// Currently active prefix. Changing that applies only to newly created events.
   std::string prefix;
@@ -133,7 +144,9 @@ private:
   /// Private, empty constructor for singleton pattern
   EventRegistry() = default;
 
-  std::vector<PendingEvent> _writeQueue;
+  std::map<std::string, int> _nameDict;
+
+  std::vector<PendingEntry> _writeQueue;
   std::size_t               _writeQueueMax = 0;
 
   std::ofstream _output;

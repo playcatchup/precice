@@ -89,6 +89,7 @@ void EventRegistry::startBackend()
         "{}-{}-{}-{}.json",
         _prefix, _applicationName, _rank, _size));
   }
+  _nameDict.emplace("_GLOBAL", 0);
 
   // write header
   fmt::print(_output,
@@ -101,7 +102,7 @@ void EventRegistry::startBackend()
   "tinit": "{}"
   }},
   "events":[
-    {{"et":"b","en":"_GLOBAL","ts":"0"}})",
+    {{"et":"n","en":"_GLOBAL","eid":0}},{{"et":"b","eid":0,"ts":0}})",
              _applicationName,
              _rank,
              _size,
@@ -116,11 +117,12 @@ void EventRegistry::stopBackend()
   PRECICE_ASSERT(_mode != Mode::Off, "The profiling is off.")
   // create end of global event
   auto now = Event::Clock::now();
-  put(EventType::Stop, "_GLOBAL", now);
+  put(StopEntry{0, now});
   // flush the queue
   flush();
   _output << "]}";
   _output.close();
+  _nameDict.clear();
 }
 
 void EventRegistry::finalize()
@@ -141,14 +143,54 @@ void EventRegistry::clear()
   _writeQueue.clear();
 }
 
-void EventRegistry::put(PendingEvent pe)
+void EventRegistry::put(PendingEntry pe)
 {
   PRECICE_ASSERT(_mode != Mode::Off, "The profiling is off.")
-  _writeQueue.push_back(std::move(pe));
+  _writeQueue.emplace_back(std::move(pe));
   if (_writeQueueMax > 0 && _writeQueue.size() > _writeQueueMax) {
     flush();
   }
 }
+
+namespace {
+struct EventWriter {
+  std::ostream &           out;
+  Event::Clock::time_point initClock;
+
+  auto sinceInit(Event::Clock::time_point tp)
+  {
+    return std::chrono::duration_cast<std::chrono::microseconds>(tp - initClock).count();
+  }
+
+  void operator()(const StartEntry &se)
+  {
+    fmt::print(out,
+               R"(,{{"et":"{}","eid":{},"ts":{}}})",
+               se.type, se.eid, sinceInit(se.clock));
+  }
+
+  void operator()(const StopEntry &se)
+  {
+    fmt::print(out,
+               R"(,{{"et":"{}","eid":{},"ts":{}}})",
+               se.type, se.eid, sinceInit(se.clock));
+  }
+
+  void operator()(const DataEntry &de)
+  {
+    fmt::print(out,
+               R"(,{{"et":"{}","eid":{},"ts":{},"dn":{},"dv":"{}"}})",
+               de.type, de.eid, sinceInit(de.clock), de.did, de.dvalue);
+  }
+
+  void operator()(const NameEntry &ne)
+  {
+    fmt::print(out,
+               R"(,{{"et":"n","en":"{}","eid":{}}})",
+               ne.name, ne.id);
+  }
+};
+} // namespace
 
 void EventRegistry::flush()
 {
@@ -156,21 +198,24 @@ void EventRegistry::flush()
     return;
   }
 
-  for (const auto &pe : _writeQueue) {
-    auto msSinceInit = std::chrono::duration_cast<std::chrono::microseconds>(pe.clock - _initClock).count();
+  EventWriter ew{_output, _initClock};
+  std::for_each(_writeQueue.begin(), _writeQueue.end(), [&ew](const auto &pe) { std::visit(ew, pe); });
 
-    if (pe.dname.empty()) {
-      fmt::print(_output,
-                 R"(,{{"et":"{}","en":"{}","ts":"{}"}})",
-                 pe.type, pe.ename, msSinceInit);
-    } else {
-      fmt::print(_output,
-                 R"(,{{"et":"{}","en":"{}","ts":"{}","dn":"{}","dv":"{}"}})",
-                 pe.type, pe.ename, msSinceInit, pe.dname, pe.dvalue);
-    }
-  }
   _output.flush();
   _writeQueue.clear();
+}
+
+int EventRegistry::nameToID(const std::string &name)
+{
+  if (auto iter = _nameDict.find(name);
+      iter == _nameDict.end()) {
+    int id = _nameDict.size();
+    _nameDict.insert(iter, {name, id});
+    _writeQueue.emplace_back(NameEntry{name, id});
+    return id;
+  } else {
+    return iter->second;
+  }
 }
 
 } // namespace precice::profiling

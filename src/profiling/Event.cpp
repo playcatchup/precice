@@ -6,9 +6,10 @@
 namespace precice::profiling {
 
 Event::Event(std::string eventName, bool fundamental, bool autostart)
-    : _name(std::move(eventName)), _fundamental(fundamental)
+    : _fundamental(fundamental)
 {
-  _name = EventRegistry::instance().prefix + _name;
+  auto &er = EventRegistry::instance();
+  _eid     = er.nameToID(EventRegistry::instance().prefix + eventName);
   if (autostart) {
     start();
   }
@@ -24,32 +25,34 @@ Event::~Event()
 void Event::start()
 {
   auto timestamp = Clock::now();
-  PRECICE_ASSERT(_state == State::STOPPED, _name);
+  PRECICE_ASSERT(_state == State::STOPPED, _eid);
   _state = State::RUNNING;
 
   if (EventRegistry::instance().accepting(toEventClass(_fundamental))) {
-    EventRegistry::instance().put(EventType::Start, _name, timestamp);
+    EventRegistry::instance().put(StartEntry{_eid, timestamp});
   }
 }
 
 void Event::stop()
 {
   auto timestamp = Clock::now();
-  PRECICE_ASSERT(_state == State::RUNNING, _name);
+  PRECICE_ASSERT(_state == State::RUNNING, _eid);
   _state = State::STOPPED;
 
   if (EventRegistry::instance().accepting(toEventClass(_fundamental))) {
-    EventRegistry::instance().put(EventType::Stop, _name, timestamp);
+    EventRegistry::instance().put(StopEntry{_eid, timestamp});
   }
 }
 
 void Event::addData(const std::string &key, int value)
 {
   auto timestamp = Clock::now();
-  PRECICE_ASSERT(_state == State::RUNNING, _name);
+  PRECICE_ASSERT(_state == State::RUNNING, _eid);
 
-  if (EventRegistry::instance().accepting(toEventClass(_fundamental))) {
-    EventRegistry::instance().put(EventType::Data, _name, timestamp, key, value);
+  auto &er = EventRegistry::instance();
+  if (er.accepting(toEventClass(_fundamental))) {
+    auto did = er.nameToID(key);
+    er.put(DataEntry{_eid, timestamp, did, value});
   }
 }
 

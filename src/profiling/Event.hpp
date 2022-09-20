@@ -59,9 +59,9 @@ public:
 private:
   Event(std::string eventName, bool fundamental, bool autostart);
 
-  std::string _name;
-  State       _state = State::STOPPED;
-  bool        _fundamental{false};
+  int   _eid;
+  State _state = State::STOPPED;
+  bool  _fundamental{false};
 };
 
 /// Class that changes the prefix in its scope
