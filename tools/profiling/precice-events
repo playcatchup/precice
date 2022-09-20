@@ -76,11 +76,11 @@ def alignEvents(events):
         if len(ranks) == 1:
             continue
         print(f"Aligning {len(ranks)} ranks of {participant}")
-        intraSyncID = events["eventDict"]["com.initializeIntraCom"]
+        intraSyncID = [id for name, id in events["eventDict"].items() if name == "com.initializeIntraCom"][0]
         syncs = {rank: e["ts"]+e["dur"]
                  for rank, data in ranks.items()
                  for e in data["events"]
-                 if e["en"] == intraSyncID
+                 if e["eid"] == intraSyncID
                  }
 
         firstSync = min(syncs.values())
@@ -110,27 +110,19 @@ def alignEvents(events):
                   "m2n.requestPrimaryRankConnection."]
     # Event ID -> Remote name
     syncIDs = {id: name.rsplit(".", 1)[1]
-               for name, id in events["eventDict"].items()
+               for id, name in events["eventDict"].items()
                if any([check in name for check in syncEvents])
                }
-    print(f"syncids {syncIDs}")
     syncs = {
         local: {
             remote: e["ts"] + e["dur"]
             for e in events["events"][local][0]["events"]
             for eid, remote in syncIDs.items()
-            if eid == e["en"]
+            if eid == e["eid"]
         }
         for local in primaries
     }
 
-    for local in primaries:
-        for e in events["events"][local][0]["events"]:
-            for eid, remote in syncIDs.items():
-                if eid == e["en"]:
-                    print(f"{local} <-> {remote} {e} {e['ts'] + e['dur']}")
-
-    print(f"syncs {syncs}")
     def hasSync(l, r): return syncs.get(l) and syncs.get(
         l).get(r) and syncs.get(r) and syncs.get(r).get(l)
     shifts = {
@@ -142,7 +134,6 @@ def alignEvents(events):
         if local < remote
         if hasSync(local, remote)
     }
-    print(f"shifts {shifts}")
     for (local, remote), shift in shifts.items():
         print(f"Aligning {remote} ({shift}us) with {local}")
         for rank, data in events["events"][remote].items():
@@ -153,15 +144,18 @@ def alignEvents(events):
     return events
 
 
-def groupEvents(events, initTime, eventIDs):
+def groupEvents(events, initTime, nameIDOffset):
     completed = []
     active = {}  # name to event data
 
     for event in events:
         type = event["et"]
-        name = event["en"]
+        if type == "n":
+            continue
+
+        name = event["eid"]
         # Handle event starts
-        if type in "br":
+        if type == "b":
             # assert(name not in active.keys())
             if (name in active.keys()):
                 print(f"Ignoring start of active event {name}")
@@ -169,7 +163,7 @@ def groupEvents(events, initTime, eventIDs):
                 event["ts"] = int(event["ts"])
                 active[name] = event
         # Handle event stops
-        elif type in "ep":
+        elif type == "e":
             # assert(name in active.keys())
             if (name not in active.keys()):
                 print(f"Ignoring end of inactive event {name}")
@@ -193,7 +187,7 @@ def groupEvents(events, initTime, eventIDs):
     if active:
         lastTS = min(map(lambda e: e["ts"] + e["dur"], completed))
         for event in active.values():
-            name = event["en"]
+            name = event["eid"]
             print(f"Truncating event without end {name}")
             begin = active[name]
             begin["ts"] = int(begin["ts"]) + initTime
@@ -202,22 +196,26 @@ def groupEvents(events, initTime, eventIDs):
             completed.append(begin)
 
     return [
-        e | {"en": eventIDs.get(e["en"])}
+        e | {"eid": e["eid"]+nameIDOffset}
         for e in sorted(completed, key=lambda e: e["ts"])
     ]
 
 
-def loadEventFile(filename, eventIDs):
+def loadEventFile(filename, nameIDs):
     print(f"Loading events from {filename}")
     content = open(filename, "r").read()
     json = loadRobust(content)
 
     unix_us = int(json["meta"]["unix_us"])
 
-    # name -> id
-    newEvents = set([e["en"] for e in json["events"]]) - set(eventIDs.keys())
-    assert not newEvents.intersection(eventIDs.keys())
-    eventIDs |= {e: id for id, e in enumerate(newEvents, start=len(eventIDs))}
+    nameIDOffset = len(nameIDs)
+
+    loadedNames = {int(e["id"]) + nameIDOffset: e["n"]
+                   for e in json["events"]
+                   if e["et"] == "n"
+                   }
+
+    allNames = loadedNames | nameIDs
 
     instanceData = {
         "meta": {
@@ -227,10 +225,33 @@ def loadEventFile(filename, eventIDs):
             "unix_us": unix_us,
             "tinit": json["meta"]["tinit"]
         },
-        "events": groupEvents(json["events"], unix_us, eventIDs)
+        "events": groupEvents(json["events"], unix_us, nameIDOffset)
     }
 
-    return (instanceData, eventIDs)
+    return (instanceData, allNames)
+
+
+def mergeDuplicateNames(contents, eventIDs):
+    # eventIDs is id -> name
+    uniqueEvents = {
+        name: id
+        for id, name in enumerate(set(eventIDs.values()))
+    }
+    idMap = {
+        oldid: uniqueEvents[name]
+        for oldid, name in eventIDs.items()
+    }
+
+    for rank in contents:
+        rank["events"] = [
+            e | {"eid": idMap[e["eid"]]}
+            for e in rank["events"]
+        ]
+
+    nameLookup = {id: name for name, id in uniqueEvents.items()}
+    assert (len(nameLookup) == len(uniqueEvents)), "Some events went missing"
+
+    return (contents, nameLookup)
 
 
 def loadEventFiles(filenames):
@@ -240,6 +261,8 @@ def loadEventFiles(filenames):
     for fn in filenames:
         idata, eventIDs = loadEventFile(fn, eventIDs)
         contents.append(idata)
+
+    contents, eventIDs = mergeDuplicateNames(contents, eventIDs)
 
     pnames = set([data["meta"]["name"] for data in contents])
     return {
@@ -279,7 +302,7 @@ class RankData:
         df["ts"] = pandas.to_datetime(df["ts"], unit="us", origin="unix")
         df.insert(0, 'participant', self.name)
         df.insert(1, 'rank', self.rank)
-        df["en"] = df["en"].apply(lambda id: eventLookup[id])
+        df["eid"] = df["eid"].apply(lambda id: eventLookup[id])
         return df
 
 
@@ -290,8 +313,7 @@ class Run:
         with open(filename, 'r') as f:
             content = json.load(f)
 
-        self.eventLookup = {id: name for name,
-                            id in content["eventDict"].items()}
+        self.eventLookup = {int(id): name for id, name in content["eventDict"].items()}
         self.data = content["events"]
 
     def iterRanks(self):
@@ -325,7 +347,7 @@ class Run:
         for rank in self.iterRanks():
             pid, tid = pids[rank.name], rank.rank
             for e in rank.events:
-                en = self.lookupEvent(e["en"])
+                en = self.lookupEvent(e["eid"])
                 mainEvents.append({
                     "name": en,
                     "cat": "Solver" if en.startswith("solver") else "preCICE",
@@ -344,7 +366,7 @@ class Run:
                 "participant": rank.name,
                 "rank": rank.rank,
                 "size": rank.size,
-                "event": self.lookupEvent(e["en"]),
+                "event": self.lookupEvent(e["eid"]),
                 "timestamp": e["ts"],
                 "duration": ns_to_unit(e["dur"]*1e3, unit) if unit else e["dur"],
                 "data": "" if "data" not in e else str(e["data"])
@@ -404,7 +426,7 @@ def plotCommand(events, eventfile, unit):
     for event, ax in zip(events, axs if nevents > 1 else [axs]):
         ax.set_title(event)
         ax.margins(y=0.2)
-        edf = total[total["en"] == event]
+        edf = total[total["eid"] == event]
 
         yticks = []
 
@@ -443,15 +465,15 @@ def analyzeCommand(eventfile, participant, outfile=None, unit='us'):
     # Convert duration to requested unit
     df.dur = df.dur.apply(lambda td: ns_to_unit(td, unit))
 
-    all = df.groupby("en").agg(
+    all = df.groupby("eid").agg(
         {"dur": [("min", "min"), ("mean", "mean"), ("max", "max"), ("sum", "sum")]})
     all.columns = all.columns.droplevel()
 
     isParallel = len(df["rank"].unique()) > 1
     if isParallel:
-        primary = df[df["rank"] == 0].groupby("en").agg(
+        primary = df[df["rank"] == 0].groupby("eid").agg(
             {"dur": [("Pmin", "min"), ("Pmean", "mean"), ("Pmax", "max"), ("Psum", "sum")]})
-        secondaries = df[df["rank"] > 0].groupby("en").agg(
+        secondaries = df[df["rank"] > 0].groupby("eid").agg(
             {"dur": [("Smin", "min"), ("Smean", "mean"), ("Smax", "max"), ("Ssum", "sum")]})
 
         primary.columns = primary.columns.droplevel()
