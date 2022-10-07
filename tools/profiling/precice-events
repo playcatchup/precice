@@ -211,7 +211,7 @@ def loadEventFile(filename, nameIDs):
 
     nameIDOffset = len(nameIDs)
 
-    loadedNames = {int(e["id"]) + nameIDOffset: e["n"]
+    loadedNames = {int(e["eid"]) + nameIDOffset: e["en"]
                    for e in json["events"]
                    if e["et"] == "n"
                    }
@@ -510,6 +510,7 @@ def mergeCommand(files, outfile, align):
             resolved += [os.path.join(path, p) for p in detected]
         else:
             print(f"Not sure what do do with {path}")
+    resolved = list(set(resolved))
 
     merged = loadEventFiles(resolved)
 
