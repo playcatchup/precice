@@ -93,7 +93,7 @@ Eigen::VectorXd BoundingBox::maxCorner() const
 
 double BoundingBox::getArea(std::vector<bool> deadAxis)
 {
-  PRECICE_ASSERT(!empty(), "Data of the bounding box is at default state.");
+  PRECICE_ASSERT(!empty(), "The BoundingBox is empty, i.e. it has zero area or zero volume.");
   double meshArea = 1.0;
   for (int d = 0; d < _dimensions; d++)
     if (not deadAxis[d])
@@ -118,10 +118,8 @@ const std::vector<double> BoundingBox::dataVector() const
 
 void BoundingBox::expandBy(const BoundingBox &otherBB)
 {
-  for (int d = 0; d < _dimensions; d++) {
-    _boundMin[d] = std::min(_boundMin[d], otherBB._boundMin[d]);
-    _boundMax[d] = std::max(_boundMax[d], otherBB._boundMax[d]);
-  }
+  _boundMin = _boundMin.cwiseMin(otherBB._boundMin);
+  _boundMax = _boundMax.cwiseMax(otherBB._boundMax);
 }
 
 void BoundingBox::expandBy(const Vertex &vertices)
