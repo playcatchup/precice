@@ -66,6 +66,7 @@ bool BoundingBox::contains(const mesh::Vertex &vertex) const
 {
   PRECICE_ASSERT(_dimensions == vertex.getDimensions(), "Vertex with different dimensions than bounding box cannot be checked.");
   const auto &coords = vertex.rawCoords();
+  
   for (int d = 0; d < _dimensions; d++) {
     if (coords[d] < _boundMin[d] || coords[d] > _boundMax[d]) {
       return false;
@@ -76,12 +77,8 @@ bool BoundingBox::contains(const mesh::Vertex &vertex) const
 
 Eigen::VectorXd BoundingBox::center() const
 {
-  PRECICE_ASSERT(!empty(), "Data of the bounding box is at default state.");
-  Eigen::VectorXd cog(_dimensions);
-  for (int d = 0; d < _dimensions; d++) {
-    cog[d] = (_boundMax[d] + _boundMin[d]) / 2.0;
-  }
-  return cog;
+  PRECICE_ASSERT(!empty(), "The BoundingBox is empty, i.e. it has zero area or zero volume.");
+  return (_boundMin + _boundMax) / 2.0;
 }
 
 Eigen::VectorXd BoundingBox::minCorner() const
