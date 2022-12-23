@@ -66,7 +66,7 @@ bool BoundingBox::contains(const mesh::Vertex &vertex) const
 {
   PRECICE_ASSERT(_dimensions == vertex.getDimensions(), "Vertex with different dimensions than bounding box cannot be checked.");
   const auto &coords = vertex.rawCoords();
-  
+
   for (int d = 0; d < _dimensions; d++) {
     if (coords[d] < _boundMin[d] || coords[d] > _boundMax[d]) {
       return false;
@@ -118,6 +118,7 @@ const std::vector<double> BoundingBox::dataVector() const
 
 void BoundingBox::expandBy(const BoundingBox &otherBB)
 {
+  PRECICE_ASSERT(!empty() || !otherBB.empty(), "The BoundingBox or other BoundingBox has zero area or zero volume.", this, otherBB);
   _boundMin = _boundMin.cwiseMin(otherBB._boundMin);
   _boundMax = _boundMax.cwiseMax(otherBB._boundMax);
 }
